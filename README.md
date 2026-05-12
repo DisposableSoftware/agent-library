@@ -4,6 +4,10 @@ A tool for managing and providing human-vetted software patterns to AI agents. P
 
 I built this after being moved between 3 different AI tools at work, while I could technically implement these things in skills, it mean't working out the configuration for each tool and lugging my files around all over the place. This MCP provides a centralized location for snippets, patterns and style guides.
 
+## Disclosure
+
+This was built using Claude Code with Opus 4.7.
+
 ## How it works
 
 Patterns are Markdown files with YAML front-matter stored on disk. The MCP server exposes four tools that agents use to look up and save patterns. The TUI lets you browse, toggle, and edit patterns interactively.
