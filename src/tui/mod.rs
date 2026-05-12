@@ -2,6 +2,8 @@ mod app;
 mod events;
 mod ui;
 
+use std::io;
+
 use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
@@ -13,27 +15,54 @@ use crate::store::PatternStore;
 use app::{App, Mode};
 use events::{AppEvent, next_event};
 
-pub fn run_tui(store: PatternStore) -> Result<(), AppError> {
-    enable_raw_mode().map_err(AppError::Io)?;
-    let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen).map_err(AppError::Io)?;
+/// RAII guard for raw mode + alternate screen. Drop restores the terminal,
+/// so even a panic inside the TUI run loop leaves a usable shell behind.
+struct TerminalGuard;
 
-    let backend = CrosstermBackend::new(stdout);
+impl TerminalGuard {
+    fn enter() -> io::Result<Self> {
+        enable_raw_mode()?;
+        execute!(io::stdout(), EnterAlternateScreen)?;
+        Ok(TerminalGuard)
+    }
+
+    fn suspend(&self) -> io::Result<()> {
+        disable_raw_mode()?;
+        execute!(io::stdout(), LeaveAlternateScreen)?;
+        Ok(())
+    }
+
+    fn resume(&self) -> io::Result<()> {
+        enable_raw_mode()?;
+        execute!(io::stdout(), EnterAlternateScreen)?;
+        Ok(())
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+    }
+}
+
+pub fn run_tui(store: PatternStore) -> Result<(), AppError> {
+    let guard = TerminalGuard::enter().map_err(AppError::Io)?;
+    let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).map_err(AppError::Io)?;
 
-    let result = run_loop(&mut terminal, store);
+    let result = run_loop(&mut terminal, store, &guard);
 
-    // Always restore terminal, even on error
-    disable_raw_mode().map_err(AppError::Io)?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen).map_err(AppError::Io)?;
-    terminal.show_cursor().map_err(AppError::Io)?;
-
+    let _ = terminal.show_cursor();
+    // guard's Drop restores the terminal on its way out.
+    drop(guard);
     result
 }
 
 fn run_loop(
-    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     store: PatternStore,
+    guard: &TerminalGuard,
 ) -> Result<(), AppError> {
     let mut app = App::new(store)?;
 
@@ -56,15 +85,9 @@ fn run_loop(
                 }
             }
             AppEvent::OpenEditor => {
-                // Restore terminal before handing off to the editor
-                disable_raw_mode().map_err(AppError::Io)?;
-                execute!(terminal.backend_mut(), LeaveAlternateScreen).map_err(AppError::Io)?;
-
+                guard.suspend().map_err(AppError::Io)?;
                 let edit_result = app.open_in_editor();
-
-                // Re-enter TUI mode
-                enable_raw_mode().map_err(AppError::Io)?;
-                execute!(terminal.backend_mut(), EnterAlternateScreen).map_err(AppError::Io)?;
+                guard.resume().map_err(AppError::Io)?;
                 terminal.clear().map_err(AppError::Io)?;
 
                 if let Err(e) = edit_result {

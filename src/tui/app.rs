@@ -69,11 +69,19 @@ impl App {
             return Ok(());
         }
         let path = self.patterns[self.cursor].file_path.clone();
-        let editor = std::env::var("VISUAL")
+        let editor_var = std::env::var("VISUAL")
             .or_else(|_| std::env::var("EDITOR"))
             .unwrap_or_else(|_| "vi".to_owned());
 
-        Command::new(&editor)
+        // Split so values like `EDITOR="emacsclient -nw"` work as expected.
+        let parts = shell_words::split(&editor_var)
+            .map_err(|e| AppError::Parse(format!("invalid editor command: {e}")))?;
+        let (program, args) = parts
+            .split_first()
+            .ok_or_else(|| AppError::Parse("editor command is empty".into()))?;
+
+        Command::new(program)
+            .args(args)
             .arg(&path)
             .status()
             .map_err(AppError::Io)?;

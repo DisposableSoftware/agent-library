@@ -23,9 +23,11 @@ pub fn resolve_library_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     // Helper: run a closure with a specific env var set, then restore.
-    // Tests manipulating env vars must not run in parallel with each other.
+    // Tests manipulating env vars must not run in parallel with each other;
+    // they're tagged `#[serial]` so cargo test runs them one at a time.
     fn with_env<F: FnOnce()>(key: &str, val: &str, f: F) {
         let old = std::env::var(key).ok();
         // SAFETY: single-threaded test context
@@ -48,6 +50,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn agent_library_path_env_var_wins() {
         with_env("AGENT_LIBRARY_PATH", "/tmp/override", || {
             assert_eq!(resolve_library_path(), PathBuf::from("/tmp/override"));
@@ -55,6 +58,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     #[cfg(target_os = "linux")]
     fn linux_xdg_config_home() {
         without_env("AGENT_LIBRARY_PATH", || {
@@ -68,6 +72,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn fallback_to_home_config() {
         without_env("AGENT_LIBRARY_PATH", || {
             without_env("XDG_CONFIG_HOME", || {

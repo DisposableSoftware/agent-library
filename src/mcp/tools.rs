@@ -114,8 +114,11 @@ fn tool_lookup_specific(params: Option<&Value>, store: &PatternStore) -> Value {
     match store.load_all() {
         Err(e) => error_response(e.to_string()),
         Ok(patterns) => {
-            match patterns.into_iter().find(|p| p.name.to_lowercase() == name) {
-                None => text_response(format!("No pattern found with name '{name}'.")),
+            match patterns
+                .into_iter()
+                .find(|p| p.enabled && p.name.to_lowercase() == name)
+            {
+                None => text_response(format!("No enabled pattern found with name '{name}'.")),
                 Some(p) => text_response(pattern_to_text(&p)),
             }
         }
@@ -129,11 +132,13 @@ fn tool_save_pattern(params: Option<&Value>, store: &PatternStore) -> Value {
     };
 
     let name = match params.get("name").and_then(|v| v.as_str()) {
-        Some(n) => n.to_owned(),
+        Some(n) if !n.trim().is_empty() => n.trim().to_owned(),
+        Some(_) => return error_response("name must not be empty"),
         None => return error_response("missing required parameter: name"),
     };
     let task_type = match params.get("task_type").and_then(|v| v.as_str()) {
-        Some(t) => t.to_owned(),
+        Some(t) if !t.trim().is_empty() => t.trim().to_owned(),
+        Some(_) => return error_response("task_type must not be empty"),
         None => return error_response("missing required parameter: task_type"),
     };
     let content = match params.get("content").and_then(|v| v.as_str()) {
@@ -206,7 +211,9 @@ fn current_date() -> String {
 
 fn unix_days_to_date(days: u64) -> String {
     // Proleptic Gregorian calendar conversion from days since 1970-01-01.
-    let z = days as i64 + 719468;
+    // Saturate at i64::MAX rather than wrap on a runaway clock; in practice
+    // `days` is on the order of 2e4 today.
+    let z = i64::try_from(days).unwrap_or(i64::MAX - 719468) + 719468;
     let era = if z >= 0 { z } else { z - 146096 } / 146097;
     let doe = z - era * 146097;
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
@@ -308,7 +315,16 @@ mod tests {
         let store = temp_store();
         let result = tool_lookup_specific(Some(&json!({"name": "doesnotexist"})), &store);
         let text = result["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("No pattern found"));
+        assert!(text.contains("No enabled pattern found"));
+    }
+
+    #[test]
+    fn lookup_specific_skips_disabled() {
+        let store = temp_store();
+        add_pattern(&store, "Old Pattern", "Architecture", false);
+        let result = tool_lookup_specific(Some(&json!({"name": "old pattern"})), &store);
+        let text = result["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("No enabled pattern found"));
     }
 
     #[test]
