@@ -1,8 +1,12 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::error::AppError;
-use crate::pattern::{parse_pattern, serialize_pattern, unique_slug, Pattern};
+use crate::pattern::{parse_pattern, serialize_pattern, slugify, Pattern};
+
+/// Maximum slug collisions before giving up.
+const MAX_SLUG_COLLISIONS: u32 = 10_000;
 
 pub struct PatternStore {
     pub base_dir: PathBuf,
@@ -37,16 +41,24 @@ impl PatternStore {
     /// Write a new pattern to disk, choosing a slug-based filename.
     /// Automatically regenerates ROOT.md afterwards.
     pub fn save_pattern(&self, pattern: &Pattern) -> Result<PathBuf, AppError> {
+        validate_field("name", &pattern.name)?;
+        validate_field("task_type", &pattern.task_type)?;
+
         let task_dir = self.patterns_dir().join(slugify_dir(&pattern.task_type));
         fs::create_dir_all(&task_dir)?;
 
-        let slug = unique_slug(&task_dir, &pattern.name);
-        let path = task_dir.join(format!("{slug}.md"));
+        let path = claim_unique_slug(&task_dir, &pattern.name)?;
 
-        let mut p = pattern.clone();
-        p.file_path = path.clone();
-
-        write_atomic(&path, &serialize_pattern(&p)?)?;
+        let fill = || -> Result<(), AppError> {
+            let mut p = pattern.clone();
+            p.file_path = path.clone();
+            write_atomic(&path, &serialize_pattern(&p)?)
+        };
+        if let Err(e) = fill() {
+            // Clean up the empty placeholder so the directory isn't littered.
+            let _ = fs::remove_file(&path);
+            return Err(e);
+        }
 
         let all = self.load_all()?;
         self.regenerate_root(&all)?;
@@ -113,9 +125,82 @@ fn write_atomic(path: &Path, content: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Convert a task type string to a directory name: lowercase, spaces → hyphens.
+/// Reject input that would let a remote caller escape the patterns directory
+/// or write to hidden / control-character paths.
+fn validate_field(label: &str, value: &str) -> Result<(), AppError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::Invalid(format!("{label} must not be empty")));
+    }
+    if value.contains('/')
+        || value.contains('\\')
+        || value.contains('\0')
+        || value.chars().any(|c| c.is_control())
+        || value == ".."
+        || value == "."
+    {
+        return Err(AppError::Invalid(format!(
+            "{label} contains invalid characters"
+        )));
+    }
+    Ok(())
+}
+
+/// Atomically claim a unique `<slug>.md` filename inside `dir` by creating an
+/// empty file via O_CREAT|O_EXCL. Returns the claimed path; the caller is
+/// responsible for filling it with content (e.g. via `write_atomic`, which
+/// renames over the placeholder).
+fn claim_unique_slug(dir: &Path, name: &str) -> Result<PathBuf, AppError> {
+    let base = slugify(name);
+    if base.is_empty() {
+        return Err(AppError::Invalid(
+            "name slug is empty after sanitisation".into(),
+        ));
+    }
+    for n in 0..MAX_SLUG_COLLISIONS {
+        let slug = if n == 0 {
+            base.clone()
+        } else {
+            format!("{base}-{}", n + 1)
+        };
+        let path = dir.join(format!("{slug}.md"));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(_) => return Ok(path),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(AppError::Io(e)),
+        }
+    }
+    Err(AppError::Invalid(format!(
+        "exhausted slug collisions for '{name}'"
+    )))
+}
+
+/// Convert a task type string to a directory name: lowercase, non-alphanumeric → hyphens.
+/// Callers must have validated the input via `validate_field` first.
 fn slugify_dir(s: &str) -> String {
-    s.to_lowercase().replace(' ', "-")
+    let lowered: String = s
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect();
+    let mut out = String::with_capacity(lowered.len());
+    let mut prev_hyphen = false;
+    for c in lowered.chars() {
+        if c == '-' {
+            if !prev_hyphen && !out.is_empty() {
+                out.push('-');
+            }
+            prev_hyphen = true;
+        } else {
+            out.push(c);
+            prev_hyphen = false;
+        }
+    }
+    out.trim_end_matches('-').to_owned()
 }
 
 fn build_root_doc(patterns: &[Pattern], base_dir: &Path) -> String {
@@ -275,6 +360,36 @@ mod tests {
         let root = fs::read_to_string(base.join("ROOT.md")).unwrap();
         assert!(root.contains("Disabled One"));
         assert!(root.contains('✗'));
+    }
+
+    #[test]
+    fn save_pattern_rejects_path_traversal() {
+        let base = tempdir();
+        let store = PatternStore::new(base.clone());
+        let mut p = make_pattern("Evil", "../../etc", true);
+        let err = store.save_pattern(&p).unwrap_err();
+        assert!(matches!(err, AppError::Invalid(_)));
+        // Slash and backslash and control chars also rejected.
+        p.task_type = "foo/bar".to_owned();
+        assert!(matches!(store.save_pattern(&p).unwrap_err(), AppError::Invalid(_)));
+        p.task_type = "foo\\bar".to_owned();
+        assert!(matches!(store.save_pattern(&p).unwrap_err(), AppError::Invalid(_)));
+        p.task_type = "ok".to_owned();
+        p.name = "".to_owned();
+        assert!(matches!(store.save_pattern(&p).unwrap_err(), AppError::Invalid(_)));
+        // Confirm no escape file landed.
+        let escaped = base.parent().unwrap().join("etc");
+        assert!(!escaped.exists());
+    }
+
+    #[test]
+    fn save_pattern_unique_slug_under_collision() {
+        let base = tempdir();
+        let store = PatternStore::new(base);
+        store.save_pattern(&make_pattern("My Pattern", "Architecture", true)).unwrap();
+        store.save_pattern(&make_pattern("My Pattern", "Architecture", true)).unwrap();
+        let all = store.load_all().unwrap();
+        assert_eq!(all.len(), 2);
     }
 
     #[test]

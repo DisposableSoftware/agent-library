@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fmt;
 use std::io;
 
@@ -7,7 +8,7 @@ pub enum AppError {
     Yaml(String),
     Json(serde_json::Error),
     Parse(String),
-
+    Invalid(String),
 }
 
 impl fmt::Display for AppError {
@@ -17,7 +18,17 @@ impl fmt::Display for AppError {
             AppError::Yaml(s) => write!(f, "YAML error: {s}"),
             AppError::Json(e) => write!(f, "JSON error: {e}"),
             AppError::Parse(s) => write!(f, "Parse error: {s}"),
+            AppError::Invalid(s) => write!(f, "Invalid input: {s}"),
+        }
+    }
+}
 
+impl Error for AppError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            AppError::Io(e) => Some(e),
+            AppError::Json(e) => Some(e),
+            AppError::Yaml(_) | AppError::Parse(_) | AppError::Invalid(_) => None,
         }
     }
 }

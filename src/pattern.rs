@@ -37,7 +37,7 @@ pub fn parse_pattern(raw: &str, file_path: PathBuf) -> Result<Pattern, AppError>
         .split_once("\n---\n")
         .ok_or_else(|| AppError::Parse("missing closing front-matter delimiter".into()))?;
 
-    let mut pattern: Pattern = serde_yml::from_str(front)
+    let mut pattern: Pattern = serde_yaml_ng::from_str(front)
         .map_err(|e| AppError::Yaml(e.to_string()))?;
 
     pattern.file_path = file_path;
@@ -48,7 +48,7 @@ pub fn parse_pattern(raw: &str, file_path: PathBuf) -> Result<Pattern, AppError>
 
 /// Serialize a pattern back to its Markdown file representation.
 pub fn serialize_pattern(pattern: &Pattern) -> Result<String, AppError> {
-    let front = serde_yml::to_string(pattern).map_err(|e| AppError::Yaml(e.to_string()))?;
+    let front = serde_yaml_ng::to_string(pattern).map_err(|e| AppError::Yaml(e.to_string()))?;
     Ok(format!("---\n{front}---\n{}", pattern.content))
 }
 
@@ -76,23 +76,6 @@ pub fn slugify(name: &str) -> String {
     }
     // Strip trailing hyphen
     result.trim_end_matches('-').to_owned()
-}
-
-/// Choose a non-colliding filename slug in `dir`, appending -2, -3 etc. as needed.
-pub fn unique_slug(dir: &std::path::Path, name: &str) -> String {
-    let base = slugify(name);
-    let candidate = format!("{base}.md");
-    if !dir.join(&candidate).exists() {
-        return base;
-    }
-    let mut n = 2u32;
-    loop {
-        let slug = format!("{base}-{n}");
-        if !dir.join(format!("{slug}.md")).exists() {
-            return slug;
-        }
-        n += 1;
-    }
 }
 
 #[cfg(test)]
@@ -159,26 +142,4 @@ mod tests {
         assert_eq!(slugify("  leading spaces"), "leading-spaces");
     }
 
-    #[test]
-    fn unique_slug_collision() {
-        let dir = tempdir();
-        // Create the base file so it "exists"
-        std::fs::write(dir.join("my-pattern.md"), "").unwrap();
-        let slug = unique_slug(&dir, "My Pattern");
-        assert_eq!(slug, "my-pattern-2");
-        // Create that too
-        std::fs::write(dir.join("my-pattern-2.md"), "").unwrap();
-        let slug2 = unique_slug(&dir, "My Pattern");
-        assert_eq!(slug2, "my-pattern-3");
-    }
-
-    fn tempdir() -> PathBuf {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir()
-            .join(format!("agent-library-test-{}-{n}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
 }
