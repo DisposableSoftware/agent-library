@@ -17,13 +17,13 @@ cargo install --path .
 ### With Nix
 
 ```sh
-nix run github:yourname/agent-library
+nix run git+https://codeberg.org/westongpt/agent-library
 ```
 
 Or enter a dev shell:
 
 ```sh
-nix develop
+nix develop git+https://codeberg.org/westongpt/agent-library
 ```
 
 ## Quick start
@@ -85,9 +85,25 @@ export AGENT_LIBRARY_PATH=/path/to/my/patterns
 
 The repo ships a Claude Code slash command that turns any document into a library pattern in one step.
 
-**Location:** `.claude/commands/intake-pattern.md`
+### Install
 
-**Usage** (inside Claude Code with the MCP server registered):
+**One-liner** (installs to `~/.claude/commands/` so it's available in every project):
+
+```sh
+curl -fsSL https://codeberg.org/westongpt/agent-library/raw/branch/main/install-skill.sh | sh
+```
+
+**From a clone:**
+
+```sh
+./install-skill.sh
+```
+
+Restart Claude Code (or run `/reload`) after installing.
+
+### Usage
+
+(Requires the MCP server to be registered — see [Quick start](#quick-start).)
 
 ```
 /intake-pattern path/to/document.md
