@@ -81,6 +81,28 @@ export AGENT_LIBRARY_PATH=/path/to/my/patterns
 | `save_pattern(name, task_type, content)` | Saves a new pattern to the library |
 | `browse_patterns()` | Returns the full pattern index (`ROOT.md`) |
 
+## Claude Code skill: `/intake-pattern`
+
+The repo ships a Claude Code slash command that turns any document into a library pattern in one step.
+
+**Location:** `.claude/commands/intake-pattern.md`
+
+**Usage** (inside Claude Code with the MCP server registered):
+
+```
+/intake-pattern path/to/document.md
+/intake-pattern https://example.com/some-guide
+/intake-pattern Use dependency injection for all service constructors...
+```
+
+The skill accepts a file path, a URL, or inline text. It will:
+
+1. Read or fetch the content.
+2. Call `browse_patterns` to check existing task types and prefer matching one over creating a new one.
+3. Infer a concise `name` and the best-fit `task_type`.
+4. Reformat the content into clean Markdown if needed, preserving well-structured documents as-is.
+5. Call `save_pattern` and report the name, task type, and saved file path.
+
 ## Pattern file format
 
 ```markdown
