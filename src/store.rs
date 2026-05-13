@@ -73,6 +73,14 @@ impl DocumentStore {
         Ok(path)
     }
 
+    /// Delete a document file from disk and regenerate ROOT.md.
+    pub fn delete_document(&self, document: &Document) -> Result<(), AppError> {
+        fs::remove_file(&document.file_path).map_err(AppError::Io)?;
+        let all = self.load_all()?;
+        self.regenerate_root(&all)?;
+        Ok(())
+    }
+
     /// Overwrite an existing document file in-place (e.g. after toggle).
     pub fn update_document(&self, document: &Document) -> Result<(), AppError> {
         write_atomic(&document.file_path, &serialize_document(document)?)?;
@@ -413,6 +421,18 @@ mod tests {
 
         let reloaded = store.load_all().unwrap();
         assert!(!reloaded[0].enabled);
+    }
+
+    #[test]
+    fn delete_document_removes_file() {
+        let base = tempdir();
+        let store = DocumentStore::new(base);
+        store.save_document(&make_document("Foo", "Architecture", true)).unwrap();
+        let all = store.load_all().unwrap();
+        assert_eq!(all.len(), 1);
+        store.delete_document(&all[0]).unwrap();
+        let all2 = store.load_all().unwrap();
+        assert!(all2.is_empty());
     }
 
     #[test]

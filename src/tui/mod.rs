@@ -101,6 +101,22 @@ fn run_loop(
                     app.status_msg = Some("Refreshed.".to_owned());
                 }
             }
+            AppEvent::DeleteRequest => {
+                app.request_delete();
+            }
+            AppEvent::Confirm => {
+                if app.mode == Mode::ConfirmDelete {
+                    if let Err(e) = app.confirm_delete() {
+                        app.status_msg = Some(format!("Error: {e}"));
+                        app.mode = Mode::Normal;
+                    }
+                }
+            }
+            AppEvent::Cancel => {
+                if app.mode == Mode::ConfirmDelete {
+                    app.cancel_delete();
+                }
+            }
         }
 
         if app.mode == Mode::Quitting {
