@@ -6,6 +6,26 @@ A tool for managing and providing human-vetted software documents to AI agents. 
 
 I built this after being moved between 3 different AI tools at work, while I could technically implement these things in skills, it meant working out the configuration for each tool and lugging my files around all over the place. This MCP provides a centralized location for snippets, documents and style guides.
 
+## Prompts
+
+Ask the agent to check your library before starting work on a task:
+
+```
+Before we start, check the agent library for any relevant documents on this task type.
+```
+
+Save something useful mid-conversation:
+
+```
+Save that error handling pattern we just worked out to the agent library so we can reuse it.
+```
+
+Pull in a specific guide by name:
+
+```
+Look up the "REST API Design" document from the agent library and follow those conventions.
+```
+
 ## Disclosure
 
 This was built using Claude Code with Opus 4.7.
@@ -101,26 +121,6 @@ The skill accepts a file path, a URL, or inline text. It will:
 3. Infer a concise `name` and the best-fit `task_type`.
 4. Reformat the content into clean Markdown if needed, preserving well-structured documents as-is.
 5. Call `save_document` and report the name, task type, and saved file path.
-
-## Prompts
-
-Ask the agent to check your library before starting work on a task:
-
-```
-Before we start, check the agent library for any relevant documents on this task type.
-```
-
-Save something useful mid-conversation:
-
-```
-Save that error handling pattern we just worked out to the agent library so we can reuse it.
-```
-
-Pull in a specific guide by name:
-
-```
-Look up the "REST API Design" document from the agent library and follow those conventions.
-```
 
 ## Running tests
 
