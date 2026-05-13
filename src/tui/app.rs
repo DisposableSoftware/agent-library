@@ -4,11 +4,14 @@ use crate::document::Document;
 use crate::error::AppError;
 use crate::store::DocumentStore;
 
+use super::theme::{NamedTheme, all_themes};
+
 #[derive(Debug, PartialEq)]
 pub enum Mode {
     Normal,
     Quitting,
     ConfirmDelete,
+    ThemePicker,
 }
 
 pub struct App {
@@ -17,17 +20,31 @@ pub struct App {
     pub mode: Mode,
     pub store: DocumentStore,
     pub status_msg: Option<String>,
+    pub themes: Vec<NamedTheme>,
+    pub theme_idx: usize,
+    pub picker_cursor: usize,
 }
 
 impl App {
-    pub fn new(store: DocumentStore) -> Result<Self, AppError> {
+    pub fn new(store: DocumentStore, initial_theme: Option<&str>) -> Result<Self, AppError> {
         let documents = store.load_all()?;
+        let themes = all_themes(&store.base_dir);
+        let theme_idx = initial_theme
+            .and_then(|name| {
+                themes
+                    .iter()
+                    .position(|t| t.name.eq_ignore_ascii_case(name))
+            })
+            .unwrap_or(0);
         Ok(App {
             documents,
             cursor: 0,
             mode: Mode::Normal,
-            store,
             status_msg: None,
+            picker_cursor: theme_idx,
+            theme_idx,
+            themes,
+            store,
         })
     }
 
@@ -154,6 +171,33 @@ impl App {
         self.documents = new_documents;
         Ok(())
     }
+
+    pub fn open_theme_picker(&mut self) {
+        self.picker_cursor = self.theme_idx;
+        self.mode = Mode::ThemePicker;
+    }
+
+    pub fn close_theme_picker(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn apply_selected_theme(&mut self) {
+        self.theme_idx = self.picker_cursor;
+        self.mode = Mode::Normal;
+        self.status_msg = Some(format!("Theme: {}", self.themes[self.theme_idx].name));
+    }
+
+    pub fn picker_up(&mut self) {
+        if self.picker_cursor > 0 {
+            self.picker_cursor -= 1;
+        }
+    }
+
+    pub fn picker_down(&mut self) {
+        if self.picker_cursor + 1 < self.themes.len() {
+            self.picker_cursor += 1;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -168,7 +212,9 @@ mod tests {
         let dir = std::env::temp_dir()
             .join(format!("agent-library-app-test-{}-{n}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        DocumentStore::new(dir)
+        let store = DocumentStore::new(dir);
+        crate::seeds::seed_themes(&store.base_dir).unwrap();
+        store
     }
 
     fn make_document(name: &str, enabled: bool) -> Document {
@@ -189,7 +235,7 @@ mod tests {
             let d = make_document(&format!("Document {i}"), true);
             store.save_document(&d).unwrap();
         }
-        App::new(store).unwrap()
+        App::new(store, None).unwrap()
     }
 
     #[test]
@@ -232,7 +278,7 @@ mod tests {
     #[test]
     fn toggle_enabled_empty_list_no_panic() {
         let store = temp_store();
-        let mut app = App::new(store).unwrap();
+        let mut app = App::new(store, None).unwrap();
         // Must not panic
         app.toggle_enabled().unwrap();
     }
@@ -240,7 +286,7 @@ mod tests {
     #[test]
     fn quit_sets_mode() {
         let store = temp_store();
-        let mut app = App::new(store).unwrap();
+        let mut app = App::new(store, None).unwrap();
         app.quit();
         assert_eq!(app.mode, Mode::Quitting);
     }
@@ -258,7 +304,7 @@ mod tests {
     #[test]
     fn toggle_skill_empty_list_no_panic() {
         let store = temp_store();
-        let mut app = App::new(store).unwrap();
+        let mut app = App::new(store, None).unwrap();
         app.toggle_skill().unwrap();
     }
 
@@ -273,7 +319,7 @@ mod tests {
     #[test]
     fn request_delete_empty_list_no_panic() {
         let store = temp_store();
-        let mut app = App::new(store).unwrap();
+        let mut app = App::new(store, None).unwrap();
         app.request_delete(); // must not panic or change mode
         assert_eq!(app.mode, Mode::Normal);
     }
@@ -296,5 +342,40 @@ mod tests {
         app.cancel_delete();
         assert_eq!(app.mode, Mode::Normal);
         assert_eq!(app.documents.len(), 2);
+    }
+
+    #[test]
+    fn theme_picker_open_and_close() {
+        let mut app = app_with_documents(1);
+        app.open_theme_picker();
+        assert_eq!(app.mode, Mode::ThemePicker);
+        assert_eq!(app.picker_cursor, app.theme_idx);
+        app.close_theme_picker();
+        assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn theme_picker_apply_changes_theme() {
+        let mut app = app_with_documents(1);
+        app.open_theme_picker();
+        app.picker_down();
+        let expected = app.picker_cursor;
+        app.apply_selected_theme();
+        assert_eq!(app.theme_idx, expected);
+        assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn initial_theme_by_name() {
+        let store = temp_store();
+        let app = App::new(store, Some("Catppuccin Latte")).unwrap();
+        assert_eq!(app.themes[app.theme_idx].name, "Catppuccin Latte");
+    }
+
+    #[test]
+    fn initial_theme_unknown_defaults_to_zero() {
+        let store = temp_store();
+        let app = App::new(store, Some("nonexistent theme")).unwrap();
+        assert_eq!(app.theme_idx, 0);
     }
 }

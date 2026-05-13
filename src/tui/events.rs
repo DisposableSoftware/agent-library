@@ -15,6 +15,7 @@ pub enum AppEvent {
     Cancel,
     ToggleSkill,
     RebuildRoot,
+    OpenThemePicker,
 }
 
 /// Block until the next key event and translate it to an AppEvent.
@@ -37,6 +38,7 @@ pub fn next_event() -> Result<Option<AppEvent>, AppError> {
                 KeyCode::Char('R') => Some(AppEvent::RebuildRoot),
                 KeyCode::Char('d') => Some(AppEvent::DeleteRequest),
                 KeyCode::Char('s') => Some(AppEvent::ToggleSkill),
+                KeyCode::Char('T') => Some(AppEvent::OpenThemePicker),
                 KeyCode::Char('y') => Some(AppEvent::Confirm),
                 KeyCode::Char('n') | KeyCode::Esc => Some(AppEvent::Cancel),
                 _ => None,

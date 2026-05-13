@@ -1,14 +1,17 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
-use super::app::App;
+use super::app::{App, Mode};
+use super::theme::Theme;
 
 pub fn draw(f: &mut Frame, app: &App) {
+    let theme = &app.themes[app.theme_idx].theme;
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -17,11 +20,15 @@ pub fn draw(f: &mut Frame, app: &App) {
         ])
         .split(f.area());
 
-    draw_document_list(f, app, chunks[0]);
-    draw_status_bar(f, app, chunks[1]);
+    draw_document_list(f, app, chunks[0], theme);
+    draw_status_bar(f, app, chunks[1], theme);
+
+    if app.mode == Mode::ThemePicker {
+        draw_theme_picker(f, app, theme);
+    }
 }
 
-fn draw_document_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+fn draw_document_list(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     // 2 borders + 2 highlight symbol + 2 icon + 20 for "  [TaskType]"
     let overhead: usize = 26;
     let name_width = (area.width as usize).saturating_sub(overhead).max(20);
@@ -31,20 +38,23 @@ fn draw_document_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         .iter()
         .map(|d| {
             let enabled_icon = if d.enabled { "✓" } else { "✗" };
-            let enabled_color = if d.enabled { Color::Green } else { Color::Red };
+            let enabled_color = if d.enabled { theme.base0b } else { theme.base08 };
             let line = Line::from(vec![
                 Span::styled(
                     format!("{enabled_icon} "),
                     Style::default().fg(enabled_color),
                 ),
-                Span::raw(format!("{:<width$}", truncate(&d.name, name_width), width = name_width)),
+                Span::styled(
+                    format!("{:<width$}", truncate(&d.name, name_width), width = name_width),
+                    Style::default().fg(theme.base05),
+                ),
                 Span::styled(
                     format!("  [{}]", d.task_type),
-                    Style::default().fg(Color::Gray),
+                    Style::default().fg(theme.base03),
                 ),
                 Span::styled(
                     if d.is_skill { " ★" } else { "" },
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(theme.base0a),
                 ),
             ]);
             ListItem::new(line)
@@ -58,11 +68,17 @@ fn draw_document_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Agent Document Library "),
+                .border_style(Style::default().fg(theme.base03))
+                .title(Span::styled(
+                    " Agent Document Library ",
+                    Style::default().fg(theme.base0d),
+                ))
+                .style(Style::default().bg(theme.base00)),
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(theme.base02)
+                .fg(theme.base05)
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("▶ ");
@@ -70,20 +86,83 @@ fn draw_document_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     f.render_stateful_widget(list, area, &mut state);
 }
 
-fn draw_status_bar(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
-    const HELP: &str =
-        "j/k ↑↓ move  space/e toggle  s skill  o/Enter edit  d delete  r refresh  R rebuild-root  q quit";
+fn draw_status_bar(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
+    let help = if app.mode == Mode::ThemePicker {
+        "j/k ↑↓ move  Enter select  Esc cancel"
+    } else {
+        "j/k ↑↓ move  space/e toggle  s skill  o/Enter edit  d delete  r refresh  R rebuild-root  T theme  q quit"
+    };
 
     let text = Text::from(vec![
-        Line::from(HELP),
+        Line::from(Span::styled(help, Style::default().fg(theme.base04))),
         Line::from(Span::styled(
             app.status_msg.as_deref().unwrap_or(""),
-            Style::default().fg(Color::Cyan),
+            Style::default().fg(theme.base0c),
         )),
     ]);
 
-    let paragraph = Paragraph::new(text).block(Block::default().borders(Borders::ALL));
+    let paragraph = Paragraph::new(text).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.base03))
+            .style(Style::default().bg(theme.base00)),
+    );
     f.render_widget(paragraph, area);
+}
+
+fn draw_theme_picker(f: &mut Frame, app: &App, theme: &Theme) {
+    let area = centered_rect(50, 60, f.area());
+
+    let items: Vec<ListItem> = app
+        .themes
+        .iter()
+        .map(|t| ListItem::new(Span::styled(&t.name, Style::default().fg(theme.base05))))
+        .collect();
+
+    let mut state = ListState::default();
+    state.select(Some(app.picker_cursor));
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.base0e))
+                .title(Span::styled(
+                    " Select Theme ",
+                    Style::default().fg(theme.base0e).add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(theme.base01)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(theme.base02)
+                .fg(theme.base07)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+
+    f.render_widget(Clear, area);
+    f.render_stateful_widget(list, area, &mut state);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical[1])[1]
 }
 
 /// Truncate `s` to at most `max` Unicode scalars, slicing on a char boundary
