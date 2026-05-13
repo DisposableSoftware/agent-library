@@ -8,6 +8,7 @@ use crate::store::DocumentStore;
 pub enum Mode {
     Normal,
     Quitting,
+    ConfirmDelete,
 }
 
 pub struct App {
@@ -90,6 +91,38 @@ impl App {
         self.refresh()?;
         self.status_msg = Some(format!("Reloaded from {}", path.display()));
         Ok(())
+    }
+
+    pub fn request_delete(&mut self) {
+        if self.documents.is_empty() {
+            return;
+        }
+        let name = &self.documents[self.cursor].name;
+        self.status_msg = Some(format!("Delete '{name}'? y / n"));
+        self.mode = Mode::ConfirmDelete;
+    }
+
+    pub fn confirm_delete(&mut self) -> Result<(), AppError> {
+        if self.documents.is_empty() {
+            self.mode = Mode::Normal;
+            return Ok(());
+        }
+        let doc = self.documents[self.cursor].clone();
+        self.store.delete_document(&doc)?;
+        self.documents.remove(self.cursor);
+        if !self.documents.is_empty() {
+            self.cursor = self.cursor.min(self.documents.len() - 1);
+        } else {
+            self.cursor = 0;
+        }
+        self.status_msg = Some(format!("Deleted '{}'.", doc.name));
+        self.mode = Mode::Normal;
+        Ok(())
+    }
+
+    pub fn cancel_delete(&mut self) {
+        self.mode = Mode::Normal;
+        self.status_msg = None;
     }
 
     pub fn refresh(&mut self) -> Result<(), AppError> {
@@ -186,5 +219,41 @@ mod tests {
         let mut app = App::new(store).unwrap();
         app.quit();
         assert_eq!(app.mode, Mode::Quitting);
+    }
+
+    #[test]
+    fn request_delete_enters_confirm_mode() {
+        let mut app = app_with_documents(2);
+        app.request_delete();
+        assert_eq!(app.mode, Mode::ConfirmDelete);
+        assert!(app.status_msg.as_deref().unwrap().contains("Delete"));
+    }
+
+    #[test]
+    fn request_delete_empty_list_no_panic() {
+        let store = temp_store();
+        let mut app = App::new(store).unwrap();
+        app.request_delete(); // must not panic or change mode
+        assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn confirm_delete_removes_document() {
+        let mut app = app_with_documents(3);
+        app.cursor = 1;
+        app.request_delete();
+        app.confirm_delete().unwrap();
+        assert_eq!(app.documents.len(), 2);
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.cursor <= app.documents.len().saturating_sub(1));
+    }
+
+    #[test]
+    fn cancel_delete_returns_to_normal() {
+        let mut app = app_with_documents(2);
+        app.request_delete();
+        app.cancel_delete();
+        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.documents.len(), 2);
     }
 }
