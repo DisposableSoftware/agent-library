@@ -1,3 +1,4 @@
+pub mod theme;
 mod app;
 mod events;
 mod ui;
@@ -46,12 +47,12 @@ impl Drop for TerminalGuard {
     }
 }
 
-pub fn run_tui(store: DocumentStore) -> Result<(), AppError> {
+pub fn run_tui(store: DocumentStore, initial_theme: Option<String>) -> Result<(), AppError> {
     let guard = TerminalGuard::enter().map_err(AppError::Io)?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).map_err(AppError::Io)?;
 
-    let result = run_loop(&mut terminal, store, &guard);
+    let result = run_loop(&mut terminal, store, initial_theme, &guard);
 
     let _ = terminal.show_cursor();
     // guard's Drop restores the terminal on its way out.
@@ -62,9 +63,10 @@ pub fn run_tui(store: DocumentStore) -> Result<(), AppError> {
 fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     store: DocumentStore,
+    initial_theme: Option<String>,
     guard: &TerminalGuard,
 ) -> Result<(), AppError> {
-    let mut app = App::new(store)?;
+    let mut app = App::new(store, initial_theme.as_deref())?;
 
     loop {
         terminal.draw(|f| ui::draw(f, &app)).map_err(AppError::Io)?;
@@ -75,56 +77,89 @@ fn run_loop(
 
         match event {
             AppEvent::Quit => {
-                app.quit();
+                if app.mode == Mode::ThemePicker {
+                    app.close_theme_picker();
+                } else {
+                    app.quit();
+                }
             }
-            AppEvent::MoveUp => app.move_cursor_up(),
-            AppEvent::MoveDown => app.move_cursor_down(),
+            AppEvent::MoveUp => {
+                if app.mode == Mode::ThemePicker {
+                    app.picker_up();
+                } else {
+                    app.move_cursor_up();
+                }
+            }
+            AppEvent::MoveDown => {
+                if app.mode == Mode::ThemePicker {
+                    app.picker_down();
+                } else {
+                    app.move_cursor_down();
+                }
+            }
             AppEvent::Toggle => {
-                if let Err(e) = app.toggle_enabled() {
+                if app.mode == Mode::Normal && let Err(e) = app.toggle_enabled() {
                     app.status_msg = Some(format!("Error: {e}"));
                 }
             }
             AppEvent::OpenEditor => {
-                guard.suspend().map_err(AppError::Io)?;
-                let edit_result = app.open_in_editor();
-                guard.resume().map_err(AppError::Io)?;
-                terminal.clear().map_err(AppError::Io)?;
+                if app.mode == Mode::ThemePicker {
+                    app.apply_selected_theme();
+                } else if app.mode == Mode::Normal {
+                    guard.suspend().map_err(AppError::Io)?;
+                    let edit_result = app.open_in_editor();
+                    guard.resume().map_err(AppError::Io)?;
+                    terminal.clear().map_err(AppError::Io)?;
 
-                if let Err(e) = edit_result {
-                    app.status_msg = Some(format!("Editor error: {e}"));
+                    if let Err(e) = edit_result {
+                        app.status_msg = Some(format!("Editor error: {e}"));
+                    }
                 }
             }
             AppEvent::Refresh => {
-                if let Err(e) = app.refresh() {
-                    app.status_msg = Some(format!("Refresh error: {e}"));
-                } else {
-                    app.status_msg = Some("Refreshed.".to_owned());
+                if app.mode == Mode::Normal {
+                    if let Err(e) = app.refresh() {
+                        app.status_msg = Some(format!("Refresh error: {e}"));
+                    } else {
+                        app.status_msg = Some("Refreshed.".to_owned());
+                    }
                 }
             }
             AppEvent::RebuildRoot => {
-                if let Err(e) = app.rebuild_root() {
+                if app.mode == Mode::Normal && let Err(e) = app.rebuild_root() {
                     app.status_msg = Some(format!("Error: {e}"));
                 }
             }
             AppEvent::ToggleSkill => {
-                if let Err(e) = app.toggle_skill() {
+                if app.mode == Mode::Normal && let Err(e) = app.toggle_skill() {
                     app.status_msg = Some(format!("Error: {e}"));
                 }
             }
             AppEvent::DeleteRequest => {
-                app.request_delete();
+                if app.mode == Mode::Normal {
+                    app.request_delete();
+                }
             }
             AppEvent::Confirm => {
-                if app.mode == Mode::ConfirmDelete {
-                    if let Err(e) = app.confirm_delete() {
-                        app.status_msg = Some(format!("Error: {e}"));
-                        app.mode = Mode::Normal;
-                    }
+                if app.mode == Mode::ThemePicker {
+                    app.apply_selected_theme();
+                } else if app.mode == Mode::ConfirmDelete
+                    && let Err(e) = app.confirm_delete()
+                {
+                    app.status_msg = Some(format!("Error: {e}"));
+                    app.mode = Mode::Normal;
                 }
             }
             AppEvent::Cancel => {
-                if app.mode == Mode::ConfirmDelete {
+                if app.mode == Mode::ThemePicker {
+                    app.close_theme_picker();
+                } else if app.mode == Mode::ConfirmDelete {
                     app.cancel_delete();
+                }
+            }
+            AppEvent::OpenThemePicker => {
+                if app.mode == Mode::Normal {
+                    app.open_theme_picker();
                 }
             }
         }

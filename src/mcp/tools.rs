@@ -12,13 +12,12 @@ pub fn handle_tool_call(name: &str, params: Option<&Value>, store: &DocumentStor
         "update_document" => tool_update_document(params, store),
         "browse_documents" => tool_browse_documents(store),
         _ => {
-            if let Ok(docs) = store.load_all() {
-                if let Some(doc) = docs
+            if let Ok(docs) = store.load_all()
+                && let Some(doc) = docs
                     .iter()
                     .find(|d| d.is_skill && d.enabled && slugify(&d.name) == name)
-                {
-                    return text_response(doc.content.clone());
-                }
+            {
+                return text_response(doc.content.clone());
             }
             json!({
                 "content": [{ "type": "text", "text": format!("Unknown tool: {name}") }],
