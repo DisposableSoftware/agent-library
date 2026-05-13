@@ -104,7 +104,9 @@ fn run_loop(
             }
             AppEvent::OpenEditor => {
                 if app.mode == Mode::ThemePicker {
-                    app.apply_selected_theme();
+                    if let Err(e) = app.apply_selected_theme() {
+                        app.status_msg = Some(format!("Error saving prefs: {e}"));
+                    }
                 } else if app.mode == Mode::Normal {
                     guard.suspend().map_err(AppError::Io)?;
                     let edit_result = app.open_in_editor();
@@ -142,7 +144,9 @@ fn run_loop(
             }
             AppEvent::Confirm => {
                 if app.mode == Mode::ThemePicker {
-                    app.apply_selected_theme();
+                    if let Err(e) = app.apply_selected_theme() {
+                        app.status_msg = Some(format!("Error saving prefs: {e}"));
+                    }
                 } else if app.mode == Mode::ConfirmDelete
                     && let Err(e) = app.confirm_delete()
                 {

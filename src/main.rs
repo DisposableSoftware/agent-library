@@ -3,6 +3,7 @@ mod config;
 mod document;
 mod error;
 mod mcp;
+mod prefs;
 mod seeds;
 mod store;
 mod tui;

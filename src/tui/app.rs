@@ -5,6 +5,7 @@ use crate::error::AppError;
 use crate::store::DocumentStore;
 
 use super::theme::{NamedTheme, all_themes};
+use crate::prefs::Preferences;
 
 #[derive(Debug, PartialEq)]
 pub enum Mode {
@@ -29,7 +30,10 @@ impl App {
     pub fn new(store: DocumentStore, initial_theme: Option<&str>) -> Result<Self, AppError> {
         let documents = store.load_all()?;
         let themes = all_themes(&store.base_dir);
-        let theme_idx = initial_theme
+        let prefs = Preferences::load(&store.base_dir);
+        // CLI flag beats saved preference; saved preference beats index 0.
+        let theme_name = initial_theme.or(prefs.theme.as_deref());
+        let theme_idx = theme_name
             .and_then(|name| {
                 themes
                     .iter()
@@ -181,10 +185,14 @@ impl App {
         self.mode = Mode::Normal;
     }
 
-    pub fn apply_selected_theme(&mut self) {
+    pub fn apply_selected_theme(&mut self) -> Result<(), AppError> {
         self.theme_idx = self.picker_cursor;
         self.mode = Mode::Normal;
-        self.status_msg = Some(format!("Theme: {}", self.themes[self.theme_idx].name));
+        let name = self.themes[self.theme_idx].name.clone();
+        let prefs = Preferences { theme: Some(name.clone()) };
+        prefs.save(&self.store.base_dir)?;
+        self.status_msg = Some(format!("Theme: {name}"));
+        Ok(())
     }
 
     pub fn picker_up(&mut self) {
