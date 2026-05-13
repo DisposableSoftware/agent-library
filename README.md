@@ -12,7 +12,9 @@ This was built using Claude Code with Opus 4.7.
 
 ## How it works
 
-Documents are Markdown files with YAML front-matter stored on disk. The MCP server exposes tools that agents use to look up and save documents. The TUI lets you browse, toggle, and edit documents interactively.
+Documents are Markdown files with YAML front-matter stored on disk. The MCP server exposes tools that agents use to look up and save documents. The TUI lets you browse, toggle, edit, and delete documents interactively.
+
+Documents marked `isSkill: true` are exposed as their own callable MCP tools — the agent can invoke them directly by name rather than looking them up.
 
 ## Installation
 
@@ -76,19 +78,29 @@ export AGENT_LIBRARY_PATH=/path/to/my/documents
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
 | `Space` / `e` | Toggle enabled/disabled |
+| `s` | Toggle skill (exposes document as a callable MCP tool) |
 | `o` / `Enter` | Open in `$EDITOR` |
+| `d` | Delete (prompts for confirmation) |
 | `r` | Refresh from disk |
+| `R` | Rebuild `ROOT.md` |
 | `q` / `Ctrl-c` | Quit |
+
+Skill documents are marked with a `★` in the list. The bottom bar always shows the keybindings; status feedback appears on the line below it.
 
 ## MCP tools
 
 | Tool | Description |
 |------|-------------|
-| `lookup_document(task_type)` | Returns all enabled documents for a task type (case-insensitive) |
 | `lookup_specific(name)` | Returns a specific document by name (case-insensitive) |
 | `save_document(name, task_type, content)` | Saves a new document to the library |
-| `update_document(name, [content], [task_type], [enabled])` | Updates an existing document by name; supply at least one optional field |
-| `browse_documents()` | Returns the full document index (`ROOT.md`) |
+| `update_document(name, [content], [task_type], [enabled], [isSkill])` | Updates an existing document by name; supply at least one optional field |
+| `browse_documents()` | Returns the document index (`ROOT.md`) grouped by task type |
+| `<skill-name>()` | Any document with `isSkill: true` is exposed as its own tool, named by slugifying the document name |
+
+### Recommended agent workflow
+
+1. Call `browse_documents` to see all available documents.
+2. Call `lookup_specific(name)` for the exact document needed, or invoke its skill tool directly.
 
 ## Claude Code skill: `/intake-document`
 
@@ -142,7 +154,23 @@ task_type: Architecture
 Document content in Markdown here.
 ```
 
-Documents are organized into subdirectories by task type (e.g. `documents/architecture/my-document.md`). `ROOT.md` is auto-regenerated whenever documents change.
+To expose a document as a callable MCP tool, add `isSkill: true`:
+
+```markdown
+---
+name: My Workflow
+enabled: true
+date_added: 2026-05-12
+task_type: Workflow
+isSkill: true
+---
+# My Workflow
+...
+```
+
+The tool name is the slugified document name (e.g. `my-workflow`). It appears in `tools/list` and can be called directly by the agent. Only enabled skill documents are exposed.
+
+Documents are organized into subdirectories by task type (e.g. `documents/architecture/my-document.md`). `ROOT.md` is auto-regenerated whenever documents change — never edit it by hand.
 
 ## Running tests
 
