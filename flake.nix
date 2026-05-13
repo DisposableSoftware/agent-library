@@ -1,5 +1,5 @@
 {
-  description = "Agent Pattern Library — MCP server and TUI for managing AI agent patterns";
+  description = "Agent Document Library — MCP server and TUI for managing AI agent documents";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -27,7 +27,7 @@
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
             meta = {
-              description = "MCP server and TUI for managing AI agent patterns";
+              description = "MCP server and TUI for managing AI agent documents";
               license = pkgs.lib.licenses.mit;
               mainProgram = "agent-library";
             };

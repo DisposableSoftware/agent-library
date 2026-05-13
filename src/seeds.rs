@@ -1,17 +1,17 @@
+use crate::document::Document;
 use crate::error::AppError;
-use crate::pattern::Pattern;
-use crate::store::PatternStore;
+use crate::store::DocumentStore;
 
-pub fn seed_patterns(store: &PatternStore) -> Result<(), AppError> {
-    for p in default_patterns() {
-        store.save_pattern(&p)?;
+pub fn seed_documents(store: &DocumentStore) -> Result<(), AppError> {
+    for d in default_documents() {
+        store.save_document(&d)?;
     }
     Ok(())
 }
 
-fn default_patterns() -> Vec<Pattern> {
+fn default_documents() -> Vec<Document> {
     vec![
-        Pattern {
+        Document {
             name: "REST API Design".to_owned(),
             enabled: true,
             date_added: "2026-05-12".to_owned(),
@@ -19,7 +19,7 @@ fn default_patterns() -> Vec<Pattern> {
             file_path: Default::default(),
             content: REST_API_DESIGN.to_owned(),
         },
-        Pattern {
+        Document {
             name: "Git Commit Style".to_owned(),
             enabled: true,
             date_added: "2026-05-12".to_owned(),
@@ -27,7 +27,7 @@ fn default_patterns() -> Vec<Pattern> {
             file_path: Default::default(),
             content: GIT_COMMIT_STYLE.to_owned(),
         },
-        Pattern {
+        Document {
             name: "Code Documentation".to_owned(),
             enabled: true,
             date_added: "2026-05-12".to_owned(),
@@ -38,7 +38,7 @@ fn default_patterns() -> Vec<Pattern> {
     ]
 }
 
-const REST_API_DESIGN: &str = r#"# REST API Design Pattern
+const REST_API_DESIGN: &str = r#"# REST API Design
 
 ## Guiding Principles
 
@@ -175,7 +175,7 @@ was missing. Now returns a structured 404 with a human-readable message.
 ```
 "#;
 
-const CODE_DOCUMENTATION: &str = r#"# Code Documentation Pattern
+const CODE_DOCUMENTATION: &str = r#"# Code Documentation
 
 ## Philosophy
 

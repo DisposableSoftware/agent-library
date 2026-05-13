@@ -12,30 +12,30 @@ pub fn draw(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(0),    // pattern list
+            Constraint::Min(0),    // document list
             Constraint::Length(3), // status / help bar
         ])
         .split(f.area());
 
-    draw_pattern_list(f, app, chunks[0]);
+    draw_document_list(f, app, chunks[0]);
     draw_status_bar(f, app, chunks[1]);
 }
 
-fn draw_pattern_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+fn draw_document_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let items: Vec<ListItem> = app
-        .patterns
+        .documents
         .iter()
-        .map(|p| {
-            let enabled_icon = if p.enabled { "✓" } else { "✗" };
-            let enabled_color = if p.enabled { Color::Green } else { Color::Red };
+        .map(|d| {
+            let enabled_icon = if d.enabled { "✓" } else { "✗" };
+            let enabled_color = if d.enabled { Color::Green } else { Color::Red };
             let line = Line::from(vec![
                 Span::styled(
                     format!("{enabled_icon} "),
                     Style::default().fg(enabled_color),
                 ),
-                Span::raw(format!("{:<30}", truncate(&p.name, 30))),
+                Span::raw(format!("{:<30}", truncate(&d.name, 30))),
                 Span::styled(
-                    format!("  [{}]", p.task_type),
+                    format!("  [{}]", d.task_type),
                     Style::default().fg(Color::DarkGray),
                 ),
             ]);
@@ -44,13 +44,13 @@ fn draw_pattern_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         .collect();
 
     let mut state = ListState::default();
-    state.select(if app.patterns.is_empty() { None } else { Some(app.cursor) });
+    state.select(if app.documents.is_empty() { None } else { Some(app.cursor) });
 
     let list = List::new(items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Agent Pattern Library "),
+                .title(" Agent Document Library "),
         )
         .highlight_style(
             Style::default()

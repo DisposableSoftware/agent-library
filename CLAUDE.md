@@ -1,26 +1,28 @@
-# Agent Pattern Library
+# Agent Document Library
 
-A Rust CLI tool for managing and providing human-vetted software patterns to AI agents. Runs as an MCP server (JSON-RPC 2.0 over stdio) and includes a TUI for human management.
+A Rust CLI tool for managing and providing human-vetted software documents to AI agents. Runs as an MCP server (JSON-RPC 2.0 over stdio) and includes a TUI for human management.
 
 ## Architecture
 
 Single binary (`agent-library`) with three subcommands:
 
-- `agent-library init` — scaffold the library with seed patterns
+- `agent-library init` — scaffold the library with seed documents
 - `agent-library serve` — run as an MCP server over stdio
 - `agent-library tui` — open the terminal UI
 
 ## Storage
 
-Patterns are Markdown files with YAML front-matter, stored under a configurable base directory:
+Documents are Markdown files with YAML front-matter, stored under a configurable base directory:
 
 - **macOS:** `~/.config/agent-library/`
 - **Linux:** `$XDG_CONFIG_HOME/agent-library/` (falls back to `~/.config/agent-library/`)
 - **Override (all platforms):** `$AGENT_LIBRARY_PATH`
 
-Files are organized as `patterns/<task-type-slug>/<pattern-slug>.md`. `ROOT.md` lives at the base directory root and is auto-regenerated after every mutation — never edit it by hand.
+Files are organized as `documents/<task-type-slug>/<document-slug>.md`. `ROOT.md` lives at the base directory root and is auto-regenerated after every mutation — never edit it by hand.
 
-## Pattern File Format
+If an existing library has a `patterns/` subdirectory from a previous version, `DocumentStore::documents_dir()` renames it to `documents/` automatically on first access.
+
+## Document File Format
 
 ```markdown
 ---
@@ -29,7 +31,7 @@ enabled: true
 date_added: 2026-05-12
 task_type: Architecture
 ---
-# Pattern content in Markdown here
+# Document content in Markdown here
 ```
 
 Front-matter fields:
@@ -40,14 +42,15 @@ Front-matter fields:
 
 ## MCP Tools
 
-All four tools return MCP `text` content blocks.
+All tools return MCP `text` content blocks.
 
 | Tool | Params | Description |
 |------|--------|-------------|
-| `lookup_pattern` | `task_type: string` | All enabled patterns matching the type (case-insensitive) |
-| `lookup_specific` | `name: string` | A single pattern by name (case-insensitive) |
-| `save_pattern` | `name, task_type, content` | Write a new pattern; regenerates ROOT.md |
-| `browse_patterns` | — | Returns ROOT.md verbatim |
+| `lookup_document` | `task_type: string` | All enabled documents matching the type (case-insensitive) |
+| `lookup_specific` | `name: string` | A single document by name (case-insensitive) |
+| `save_document` | `name, task_type, content` | Write a new document; regenerates ROOT.md |
+| `update_document` | `name` (required); `content`, `task_type`, `enabled` (at least one required) | Update fields on an existing document by name (case-insensitive); regenerates ROOT.md |
+| `browse_documents` | — | Returns ROOT.md verbatim |
 
 ## Source Layout
 
@@ -57,16 +60,16 @@ src/
 ├── cli.rs           — clap CLI definitions
 ├── config.rs        — resolve_library_path() with platform/env logic
 ├── error.rs         — AppError enum
-├── pattern.rs       — Pattern struct, front-matter parser, slug generation
-├── seeds.rs         — embedded seed pattern content
-├── store.rs         — PatternStore: load_all, save_pattern, update_pattern, regenerate_root
+├── document.rs      — Document struct, front-matter parser, slug generation
+├── seeds.rs         — embedded seed document content
+├── store.rs         — DocumentStore: load_all, save_document, update_document, regenerate_root
 ├── mcp/
 │   ├── mod.rs       — stdio JSON-RPC read loop (newline-delimited, flush after every write)
 │   ├── types.rs     — RpcRequest/Response/Error types and JSON-RPC error constants
 │   └── tools.rs     — tool handler implementations
 └── tui/
     ├── mod.rs       — terminal setup/teardown and event loop
-    ├── app.rs       — App state (patterns list, cursor, mode)
+    ├── app.rs       — App state (documents list, cursor, mode)
     ├── ui.rs        — ratatui render functions
     └── events.rs    — crossterm events → AppEvent
 ```
@@ -86,16 +89,16 @@ No async runtime. MCP stdio is synchronous; the TUI uses crossterm's blocking ev
 
 - **Stdout discipline:** MCP JSON-RPC is on stdout. All logging/debug output must go to stderr or it corrupts the protocol stream.
 - **Flush after every MCP write:** `stdout.lock().flush()` after every `writeln!` — pipe-buffered stdout will hang the host.
-- **Atomic file writes:** patterns are written to `.tmp` then renamed (POSIX atomic rename).
-- **ROOT.md is auto-generated:** regenerated in full after every `save_pattern` or `update_pattern` call. Sorted by task type then name for deterministic output.
+- **Atomic file writes:** documents are written to `.tmp` then renamed (POSIX atomic rename).
+- **ROOT.md is auto-generated:** regenerated in full after every `save_document` or `update_document` call. Sorted by task type then name for deterministic output.
 - **Notifications vs requests:** MCP `initialized` is a notification (no `id`); the server returns no response. Requests always have an `id`.
 - **TUI + editor:** raw mode is disabled before spawning `$EDITOR` and re-enabled after. Editor lookup order: `$VISUAL` → `$EDITOR` → `vi`.
-- **Slug generation:** pattern names are lowercased and non-alphanumeric characters replaced with hyphens. Collisions append `-2`, `-3`, etc.
+- **Slug generation:** document names are lowercased and non-alphanumeric characters replaced with hyphens. Collisions append `-2`, `-3`, etc.
 
 ## Testing
 
 ```sh
-cargo test          # 38 unit tests across all modules
+cargo test          # 45 unit tests across all modules
 cargo clippy -- -D warnings
 ```
 

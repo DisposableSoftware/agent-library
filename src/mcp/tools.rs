@@ -1,16 +1,17 @@
 use serde_json::{json, Value};
 
-use crate::pattern::Pattern;
-use crate::store::PatternStore;
+use crate::document::Document;
+use crate::store::DocumentStore;
 
 /// Dispatch a `tools/call` request to the matching tool handler.
 /// Returns the MCP `result` value to embed in the RpcResponse.
-pub fn handle_tool_call(name: &str, params: Option<&Value>, store: &PatternStore) -> Value {
+pub fn handle_tool_call(name: &str, params: Option<&Value>, store: &DocumentStore) -> Value {
     match name {
-        "lookup_pattern" => tool_lookup_pattern(params, store),
+        "lookup_document" => tool_lookup_document(params, store),
         "lookup_specific" => tool_lookup_specific(params, store),
-        "save_pattern" => tool_save_pattern(params, store),
-        "browse_patterns" => tool_browse_patterns(store),
+        "save_document" => tool_save_document(params, store),
+        "update_document" => tool_update_document(params, store),
+        "browse_documents" => tool_browse_documents(store),
         _ => json!({
             "content": [{ "type": "text", "text": format!("Unknown tool: {name}") }],
             "isError": true
@@ -22,8 +23,8 @@ pub fn handle_tool_call(name: &str, params: Option<&Value>, store: &PatternStore
 pub fn tool_definitions() -> Value {
     json!([
         {
-            "name": "lookup_pattern",
-            "description": "Return all enabled patterns for a given task type.",
+            "name": "lookup_document",
+            "description": "Return all enabled documents for a given task type.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -37,34 +38,48 @@ pub fn tool_definitions() -> Value {
         },
         {
             "name": "lookup_specific",
-            "description": "Return a specific pattern by name.",
+            "description": "Return a specific document by name.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "The pattern name to look up"
+                        "description": "The document name to look up"
                     }
                 },
                 "required": ["name"]
             }
         },
         {
-            "name": "save_pattern",
-            "description": "Save a new pattern to the library.",
+            "name": "save_document",
+            "description": "Save a new document to the library.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "name": { "type": "string", "description": "Pattern name" },
+                    "name": { "type": "string", "description": "Document name" },
                     "task_type": { "type": "string", "description": "Task type category" },
-                    "content": { "type": "string", "description": "Pattern body in Markdown" }
+                    "content": { "type": "string", "description": "Document body in Markdown" }
                 },
                 "required": ["name", "task_type", "content"]
             }
         },
         {
-            "name": "browse_patterns",
-            "description": "Return the root index document listing all patterns.",
+            "name": "update_document",
+            "description": "Update an existing document by name. Supply at least one of content, task_type, or enabled.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Exact document name to update (case-insensitive)" },
+                    "content": { "type": "string", "description": "New document body in Markdown" },
+                    "task_type": { "type": "string", "description": "New task type category" },
+                    "enabled": { "type": "boolean", "description": "Enable or disable the document" }
+                },
+                "required": ["name"]
+            }
+        },
+        {
+            "name": "browse_documents",
+            "description": "Return the root index document listing all documents.",
             "inputSchema": {
                 "type": "object",
                 "properties": {}
@@ -75,7 +90,7 @@ pub fn tool_definitions() -> Value {
 
 // ── Tool implementations ───────────────────────────────────────────────────
 
-fn tool_lookup_pattern(params: Option<&Value>, store: &PatternStore) -> Value {
+fn tool_lookup_document(params: Option<&Value>, store: &DocumentStore) -> Value {
     let task_type = match params.and_then(|p| p.get("task_type")).and_then(|v| v.as_str()) {
         Some(t) => t.to_lowercase(),
         None => return error_response("missing required parameter: task_type"),
@@ -83,21 +98,21 @@ fn tool_lookup_pattern(params: Option<&Value>, store: &PatternStore) -> Value {
 
     match store.load_all() {
         Err(e) => error_response(e.to_string()),
-        Ok(patterns) => {
-            let matches: Vec<_> = patterns
+        Ok(documents) => {
+            let matches: Vec<_> = documents
                 .into_iter()
-                .filter(|p| p.enabled && p.task_type.to_lowercase() == task_type)
+                .filter(|d| d.enabled && d.task_type.to_lowercase() == task_type)
                 .collect();
 
             if matches.is_empty() {
                 return text_response(format!(
-                    "No enabled patterns found for task type '{task_type}'."
+                    "No enabled documents found for task type '{task_type}'."
                 ));
             }
 
             let text = matches
                 .iter()
-                .map(pattern_to_text)
+                .map(document_to_text)
                 .collect::<Vec<_>>()
                 .join("\n\n---\n\n");
             text_response(text)
@@ -105,7 +120,7 @@ fn tool_lookup_pattern(params: Option<&Value>, store: &PatternStore) -> Value {
     }
 }
 
-fn tool_lookup_specific(params: Option<&Value>, store: &PatternStore) -> Value {
+fn tool_lookup_specific(params: Option<&Value>, store: &DocumentStore) -> Value {
     let name = match params.and_then(|p| p.get("name")).and_then(|v| v.as_str()) {
         Some(n) => n.to_lowercase(),
         None => return error_response("missing required parameter: name"),
@@ -113,19 +128,19 @@ fn tool_lookup_specific(params: Option<&Value>, store: &PatternStore) -> Value {
 
     match store.load_all() {
         Err(e) => error_response(e.to_string()),
-        Ok(patterns) => {
-            match patterns
+        Ok(documents) => {
+            match documents
                 .into_iter()
-                .find(|p| p.enabled && p.name.to_lowercase() == name)
+                .find(|d| d.enabled && d.name.to_lowercase() == name)
             {
-                None => text_response(format!("No enabled pattern found with name '{name}'.")),
-                Some(p) => text_response(pattern_to_text(&p)),
+                None => text_response(format!("No enabled document found with name '{name}'.")),
+                Some(d) => text_response(document_to_text(&d)),
             }
         }
     }
 }
 
-fn tool_save_pattern(params: Option<&Value>, store: &PatternStore) -> Value {
+fn tool_save_document(params: Option<&Value>, store: &DocumentStore) -> Value {
     let params = match params {
         Some(p) => p,
         None => return error_response("missing parameters"),
@@ -147,7 +162,7 @@ fn tool_save_pattern(params: Option<&Value>, store: &PatternStore) -> Value {
     };
 
     let today = current_date();
-    let pattern = Pattern {
+    let document = Document {
         name: name.clone(),
         enabled: true,
         date_added: today,
@@ -156,16 +171,66 @@ fn tool_save_pattern(params: Option<&Value>, store: &PatternStore) -> Value {
         content,
     };
 
-    match store.save_pattern(&pattern) {
+    match store.save_document(&document) {
         Ok(path) => text_response(format!(
-            "Pattern '{name}' saved to {}",
+            "Document '{name}' saved to {}",
             path.display()
         )),
         Err(e) => error_response(e.to_string()),
     }
 }
 
-fn tool_browse_patterns(store: &PatternStore) -> Value {
+fn tool_update_document(params: Option<&Value>, store: &DocumentStore) -> Value {
+    let params = match params {
+        Some(p) => p,
+        None => return error_response("missing parameters"),
+    };
+
+    let name = match params.get("name").and_then(|v| v.as_str()) {
+        Some(n) if !n.trim().is_empty() => n.trim().to_lowercase(),
+        Some(_) => return error_response("name must not be empty"),
+        None => return error_response("missing required parameter: name"),
+    };
+
+    let new_content = params.get("content").and_then(|v| v.as_str());
+    let new_task_type = params.get("task_type").and_then(|v| v.as_str());
+    let new_enabled = params.get("enabled").and_then(|v| v.as_bool());
+
+    if new_content.is_none() && new_task_type.is_none() && new_enabled.is_none() {
+        return error_response("at least one of content, task_type, or enabled must be provided");
+    }
+
+    let mut documents = match store.load_all() {
+        Ok(d) => d,
+        Err(e) => return error_response(e.to_string()),
+    };
+
+    let document = match documents.iter_mut().find(|d| d.name.to_lowercase() == name) {
+        Some(d) => d,
+        None => return error_response(format!("no document found with name '{name}'")),
+    };
+
+    if let Some(c) = new_content {
+        document.content = c.to_owned();
+    }
+    if let Some(t) = new_task_type {
+        if t.trim().is_empty() {
+            return error_response("task_type must not be empty");
+        }
+        document.task_type = t.trim().to_owned();
+    }
+    if let Some(e) = new_enabled {
+        document.enabled = e;
+    }
+
+    let display_name = document.name.clone();
+    match store.update_document(document) {
+        Ok(()) => text_response(format!("Document '{display_name}' updated.")),
+        Err(e) => error_response(e.to_string()),
+    }
+}
+
+fn tool_browse_documents(store: &DocumentStore) -> Value {
     match store.load_root() {
         Ok(text) => text_response(text),
         Err(e) => error_response(e.to_string()),
@@ -187,14 +252,14 @@ fn error_response(msg: impl Into<String>) -> Value {
     })
 }
 
-fn pattern_to_text(p: &Pattern) -> String {
+fn document_to_text(d: &Document) -> String {
     format!(
         "## {}\n**Task type:** {}  |  **Added:** {}  |  **Enabled:** {}\n\n{}",
-        p.name,
-        p.task_type,
-        p.date_added,
-        if p.enabled { "yes" } else { "no" },
-        p.content
+        d.name,
+        d.task_type,
+        d.date_added,
+        if d.enabled { "yes" } else { "no" },
+        d.content
     )
 }
 
@@ -229,21 +294,21 @@ fn unix_days_to_date(days: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pattern::Pattern;
+    use crate::document::Document;
     use std::path::PathBuf;
 
-    fn temp_store() -> PatternStore {
+    fn temp_store() -> DocumentStore {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir()
             .join(format!("agent-library-tools-test-{}-{n}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        PatternStore::new(dir)
+        DocumentStore::new(dir)
     }
 
-    fn add_pattern(store: &PatternStore, name: &str, task_type: &str, enabled: bool) {
-        let p = Pattern {
+    fn add_document(store: &DocumentStore, name: &str, task_type: &str, enabled: bool) {
+        let d = Document {
             name: name.to_owned(),
             enabled,
             date_added: "2026-05-12".to_owned(),
@@ -251,58 +316,58 @@ mod tests {
             file_path: PathBuf::new(),
             content: format!("# {name}\n\nContent.\n"),
         };
-        store.save_pattern(&p).unwrap();
+        store.save_document(&d).unwrap();
     }
 
     #[test]
-    fn lookup_pattern_returns_matching() {
+    fn lookup_document_returns_matching() {
         let store = temp_store();
-        add_pattern(&store, "REST API Design", "Architecture", true);
-        add_pattern(&store, "Git Commit Style", "Style Guide", true);
+        add_document(&store, "REST API Design", "Architecture", true);
+        add_document(&store, "Git Commit Style", "Style Guide", true);
 
-        let result = tool_lookup_pattern(Some(&json!({"task_type": "architecture"})), &store);
+        let result = tool_lookup_document(Some(&json!({"task_type": "architecture"})), &store);
         let text = result["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("REST API Design"));
         assert!(!text.contains("Git Commit Style"));
     }
 
     #[test]
-    fn lookup_pattern_case_insensitive() {
+    fn lookup_document_case_insensitive() {
         let store = temp_store();
-        add_pattern(&store, "REST API Design", "Architecture", true);
+        add_document(&store, "REST API Design", "Architecture", true);
 
-        let result = tool_lookup_pattern(Some(&json!({"task_type": "ARCHITECTURE"})), &store);
+        let result = tool_lookup_document(Some(&json!({"task_type": "ARCHITECTURE"})), &store);
         let text = result["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("REST API Design"));
         assert_ne!(result.get("isError"), Some(&json!(true)));
     }
 
     #[test]
-    fn lookup_pattern_enabled_only() {
+    fn lookup_document_enabled_only() {
         let store = temp_store();
-        add_pattern(&store, "REST API Design", "Architecture", true);
-        add_pattern(&store, "Old Pattern", "Architecture", false);
+        add_document(&store, "REST API Design", "Architecture", true);
+        add_document(&store, "Old Document", "Architecture", false);
 
-        let result = tool_lookup_pattern(Some(&json!({"task_type": "architecture"})), &store);
+        let result = tool_lookup_document(Some(&json!({"task_type": "architecture"})), &store);
         let text = result["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("REST API Design"));
-        assert!(!text.contains("Old Pattern"));
+        assert!(!text.contains("Old Document"));
     }
 
     #[test]
-    fn lookup_pattern_no_match() {
+    fn lookup_document_no_match() {
         let store = temp_store();
-        let result = tool_lookup_pattern(Some(&json!({"task_type": "nonexistent"})), &store);
+        let result = tool_lookup_document(Some(&json!({"task_type": "nonexistent"})), &store);
         // Should return a message, not an error
         assert_ne!(result.get("isError"), Some(&json!(true)));
         let text = result["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("No enabled patterns"));
+        assert!(text.contains("No enabled documents"));
     }
 
     #[test]
     fn lookup_specific_finds_by_name() {
         let store = temp_store();
-        add_pattern(&store, "REST API Design", "Architecture", true);
+        add_document(&store, "REST API Design", "Architecture", true);
 
         let result = tool_lookup_specific(Some(&json!({"name": "rest api design"})), &store);
         let text = result["content"][0]["text"].as_str().unwrap();
@@ -315,40 +380,82 @@ mod tests {
         let store = temp_store();
         let result = tool_lookup_specific(Some(&json!({"name": "doesnotexist"})), &store);
         let text = result["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("No enabled pattern found"));
+        assert!(text.contains("No enabled document found"));
     }
 
     #[test]
     fn lookup_specific_skips_disabled() {
         let store = temp_store();
-        add_pattern(&store, "Old Pattern", "Architecture", false);
-        let result = tool_lookup_specific(Some(&json!({"name": "old pattern"})), &store);
+        add_document(&store, "Old Document", "Architecture", false);
+        let result = tool_lookup_specific(Some(&json!({"name": "old document"})), &store);
         let text = result["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("No enabled pattern found"));
+        assert!(text.contains("No enabled document found"));
     }
 
     #[test]
-    fn save_pattern_creates_file() {
+    fn save_document_creates_file() {
         let store = temp_store();
-        let result = tool_save_pattern(
-            Some(&json!({"name": "New Pattern", "task_type": "Architecture", "content": "# Hello\n"})),
+        let result = tool_save_document(
+            Some(&json!({"name": "New Document", "task_type": "Architecture", "content": "# Hello\n"})),
             &store,
         );
         assert_ne!(result.get("isError"), Some(&json!(true)));
         let all = store.load_all().unwrap();
         assert_eq!(all.len(), 1);
-        assert_eq!(all[0].name, "New Pattern");
+        assert_eq!(all[0].name, "New Document");
     }
 
     #[test]
-    fn browse_patterns_returns_root() {
+    fn browse_documents_returns_root() {
         let store = temp_store();
-        add_pattern(&store, "Foo", "Style Guide", true);
+        add_document(&store, "Foo", "Style Guide", true);
 
-        let result = tool_browse_patterns(&store);
+        let result = tool_browse_documents(&store);
         let text = result["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("Agent Pattern Library"));
+        assert!(text.contains("Agent Document Library"));
         assert!(text.contains("Foo"));
+    }
+
+    #[test]
+    fn update_document_changes_content() {
+        let store = temp_store();
+        add_document(&store, "REST API Design", "Architecture", true);
+
+        let result = tool_update_document(
+            Some(&json!({"name": "REST API Design", "content": "# Updated\n\nNew content.\n"})),
+            &store,
+        );
+        assert_ne!(result.get("isError"), Some(&json!(true)));
+        let all = store.load_all().unwrap();
+        assert!(all[0].content.contains("New content."));
+    }
+
+    #[test]
+    fn update_document_toggles_enabled() {
+        let store = temp_store();
+        add_document(&store, "REST API Design", "Architecture", true);
+
+        tool_update_document(Some(&json!({"name": "REST API Design", "enabled": false})), &store);
+        let all = store.load_all().unwrap();
+        assert!(!all[0].enabled);
+    }
+
+    #[test]
+    fn update_document_not_found() {
+        let store = temp_store();
+        let result = tool_update_document(
+            Some(&json!({"name": "Nonexistent", "content": "x"})),
+            &store,
+        );
+        assert_eq!(result.get("isError"), Some(&json!(true)));
+    }
+
+    #[test]
+    fn update_document_requires_at_least_one_field() {
+        let store = temp_store();
+        add_document(&store, "REST API Design", "Architecture", true);
+        let result = tool_update_document(Some(&json!({"name": "REST API Design"})), &store);
+        assert_eq!(result.get("isError"), Some(&json!(true)));
     }
 
     #[test]

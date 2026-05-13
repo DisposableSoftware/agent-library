@@ -1,16 +1,16 @@
 #!/bin/sh
-# Install the /intake-pattern Claude Code skill to ~/.claude/commands/
+# Install the /intake-document Claude Code skill to ~/.claude/commands/
 # Works whether you're running from the cloned repo or piping from the web.
 
 set -e
 
-DEST="$HOME/.claude/commands/intake-pattern.md"
-RAW_URL="https://codeberg.org/westongpt/agent-library/raw/branch/main/.claude/commands/intake-pattern.md"
+DEST="$HOME/.claude/commands/intake-document.md"
+RAW_URL="https://codeberg.org/westongpt/agent-library/raw/branch/main/.claude/commands/intake-document.md"
 
 mkdir -p "$(dirname "$DEST")"
 
 if [ -f "$DEST" ]; then
-    printf "intake-pattern is already installed at %s\n" "$DEST"
+    printf "intake-document is already installed at %s\n" "$DEST"
     printf "Overwrite? [y/N] "
     read -r reply
     case "$reply" in
@@ -21,7 +21,7 @@ fi
 
 # Prefer copying from the local repo if this script is run from within it.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOCAL="$SCRIPT_DIR/.claude/commands/intake-pattern.md"
+LOCAL="$SCRIPT_DIR/.claude/commands/intake-document.md"
 
 if [ -f "$LOCAL" ]; then
     cp "$LOCAL" "$DEST"
@@ -42,4 +42,4 @@ fi
 
 echo ""
 echo "Restart Claude Code (or run /reload) and use:"
-echo "  /intake-pattern <file | url | text>"
+echo "  /intake-document <file | url | text>"
