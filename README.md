@@ -64,112 +64,6 @@ agent-library tui --theme "Catppuccin Latte"
 claude mcp add agent-library -- agent-library serve
 ```
 
-## Storage
-
-| Platform | Default path |
-|----------|-------------|
-| macOS    | `~/.config/agent-library/` |
-| Linux    | `$XDG_CONFIG_HOME/agent-library/` (falls back to `~/.config/agent-library/`) |
-
-Override on any platform with the `AGENT_LIBRARY_PATH` environment variable:
-
-```sh
-export AGENT_LIBRARY_PATH=/path/to/my/documents
-```
-
-The library directory contains:
-
-```
-<library>/
-├── documents/        # markdown documents, organized by task type
-├── themes/           # base16 YAML theme files
-└── ROOT.md           # auto-generated index (never edit by hand)
-```
-
-## TUI controls
-
-| Key | Action |
-|-----|--------|
-| `j` / `↓` | Move down |
-| `k` / `↑` | Move up |
-| `Space` / `e` | Toggle enabled/disabled |
-| `s` | Toggle skill (exposes document as a callable MCP tool) |
-| `o` / `Enter` | Open in `$EDITOR` |
-| `d` | Delete (prompts for confirmation) |
-| `r` | Refresh from disk |
-| `R` | Rebuild `ROOT.md` |
-| `T` | Open theme picker |
-| `q` / `Ctrl-c` | Quit |
-
-Skill documents are marked with a `★` in the list. The bottom bar always shows the keybindings; status feedback appears on the line below it.
-
-### Theme picker
-
-Press `T` to open the theme picker. Navigate with `j`/`k`, confirm with `Enter`, cancel with `Esc`. The selection is session-only — use `--theme` to set a default on launch.
-
-## Themes
-
-The TUI uses [base16](https://github.com/chriskempson/base16) themes. Four [Catppuccin](https://github.com/catppuccin/catppuccin) variants are bundled:
-
-| Theme | Style |
-|-------|-------|
-| Catppuccin Mocha | Dark (default) |
-| Catppuccin Macchiato | Dark |
-| Catppuccin Frappe | Medium dark |
-| Catppuccin Latte | Light |
-
-Theme files live in `<library>/themes/` as standard base16 YAML. You can edit or delete the bundled themes, and add your own — any `*.yaml` or `*.yml` file in that directory will appear in the picker.
-
-**Custom theme format:**
-
-```yaml
-scheme: "My Theme"
-author: "you"
-base00: "1e1e2e"   # background
-base01: "181825"   # lighter background
-base02: "313244"   # selection background
-base03: "45475a"   # comments / subtle text
-base04: "585b70"   # dark foreground
-base05: "cdd6f4"   # default foreground
-base06: "f5e0dc"   # light foreground
-base07: "b4befe"   # light background
-base08: "f38ba8"   # red (disabled, errors)
-base09: "fab387"   # peach (constants)
-base0a: "f9e2af"   # yellow (skills ★)
-base0b: "a6e3a1"   # green (enabled)
-base0c: "94e2d5"   # teal (status messages)
-base0d: "89b4fa"   # blue (headings)
-base0e: "cba6f7"   # mauve (keywords)
-base0f: "f2cdcd"   # flamingo (deprecated)
-```
-
-To restore the bundled themes after editing or deleting them:
-
-```sh
-agent-library init --seed-themes
-```
-
-To re-add the seed documents to an existing library:
-
-```sh
-agent-library init --seed-documents
-```
-
-## MCP tools
-
-| Tool | Description |
-|------|-------------|
-| `lookup_specific(name)` | Returns a specific document by name (case-insensitive) |
-| `save_document(name, task_type, content)` | Saves a new document to the library |
-| `update_document(name, [content], [task_type], [enabled], [isSkill])` | Updates an existing document by name; supply at least one optional field |
-| `browse_documents()` | Returns the document index (`ROOT.md`) grouped by task type |
-| `<skill-name>()` | Any document with `isSkill: true` is exposed as its own tool, named by slugifying the document name |
-
-### Recommended agent workflow
-
-1. Call `browse_documents` to see all available documents.
-2. Call `lookup_specific(name)` for the exact document needed, or invoke its skill tool directly.
-
 ## Claude Code skill: `/intake-document`
 
 The repo ships a Claude Code slash command that turns any document into a library entry in one step.
@@ -208,37 +102,25 @@ The skill accepts a file path, a URL, or inline text. It will:
 4. Reformat the content into clean Markdown if needed, preserving well-structured documents as-is.
 5. Call `save_document` and report the name, task type, and saved file path.
 
-## Document file format
+## Prompts
 
-```markdown
----
-name: My Document
-enabled: true
-date_added: 2026-05-12
-task_type: Architecture
----
-# My Document
+Ask the agent to check your library before starting work on a task:
 
-Document content in Markdown here.
+```
+Before we start, check the agent library for any relevant documents on this task type.
 ```
 
-To expose a document as a callable MCP tool, add `isSkill: true`:
+Save something useful mid-conversation:
 
-```markdown
----
-name: My Workflow
-enabled: true
-date_added: 2026-05-12
-task_type: Workflow
-isSkill: true
----
-# My Workflow
-...
+```
+Save that error handling pattern we just worked out to the agent library so we can reuse it.
 ```
 
-The tool name is the slugified document name (e.g. `my-workflow`). It appears in `tools/list` and can be called directly by the agent. Only enabled skill documents are exposed.
+Pull in a specific guide by name:
 
-Documents are organized into subdirectories by task type (e.g. `documents/architecture/my-document.md`). `ROOT.md` is auto-regenerated whenever documents change — never edit it by hand.
+```
+Look up the "REST API Design" document from the agent library and follow those conventions.
+```
 
 ## Running tests
 
