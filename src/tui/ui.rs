@@ -40,7 +40,7 @@ fn draw_document_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
                 Span::raw(format!("{:<width$}", truncate(&d.name, name_width), width = name_width)),
                 Span::styled(
                     format!("  [{}]", d.task_type),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(Color::Gray),
                 ),
                 Span::styled(
                     if d.is_skill { " ★" } else { "" },
