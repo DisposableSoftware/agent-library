@@ -67,7 +67,8 @@ src/
 ├── config.rs        — resolve_library_path() with platform/env logic
 ├── error.rs         — AppError enum
 ├── document.rs      — Document struct, front-matter parser, slug generation
-├── seeds.rs         — embedded seed document content
+├── prefs.rs         — Preferences struct: load/save config.toml
+├── seeds.rs         — embedded seed document content and theme YAML
 ├── store.rs         — DocumentStore: load_all, save_document, update_document, regenerate_root
 ├── mcp/
 │   ├── mod.rs       — stdio JSON-RPC read loop (newline-delimited, flush after every write)
@@ -86,7 +87,8 @@ src/
 |-------|---------|
 | `clap` | CLI argument parsing |
 | `serde` + `serde_json` | JSON serialization (MCP protocol) |
-| `serde_yml` | YAML front-matter parsing (`serde_yaml` is deprecated — do not use it) |
+| `serde_yaml_ng` | YAML front-matter and theme file parsing (`serde_yaml` is deprecated — do not use it) |
+| `toml` | Preferences serialization (`config.toml`) |
 | `ratatui` + `crossterm` | Terminal UI |
 
 No async runtime. MCP stdio is synchronous; the TUI uses crossterm's blocking event reads.
