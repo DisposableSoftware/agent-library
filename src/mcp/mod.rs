@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use serde_json::{json, Value};
 
 use crate::error::AppError;
-use crate::store::PatternStore;
+use crate::store::DocumentStore;
 use types::{INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR, RpcError, RpcRequest, RpcResponse};
 
 /// Maximum bytes allowed in a single JSON-RPC line. A malicious or buggy
@@ -14,7 +14,7 @@ use types::{INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR, RpcError, RpcRequest
 /// buffer until OOM. 8 MiB is well above any realistic pattern payload.
 const MAX_LINE_BYTES: u64 = 8 * 1024 * 1024;
 
-pub fn run_server(store: PatternStore) -> Result<(), AppError> {
+pub fn run_server(store: DocumentStore) -> Result<(), AppError> {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut reader = BufReader::new(stdin.lock());
@@ -65,7 +65,7 @@ pub fn run_server(store: PatternStore) -> Result<(), AppError> {
     Ok(())
 }
 
-fn handle_line(line: &str, store: &PatternStore) -> Option<String> {
+fn handle_line(line: &str, store: &DocumentStore) -> Option<String> {
     let req: RpcRequest = match serde_json::from_str(line) {
         Ok(r) => r,
         Err(e) => {

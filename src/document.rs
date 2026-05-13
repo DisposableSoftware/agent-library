@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Pattern {
+pub struct Document {
     pub name: String,
     pub enabled: bool,
     pub date_added: String,
@@ -16,7 +16,7 @@ pub struct Pattern {
     pub content: String,
 }
 
-/// Parse a pattern from raw Markdown file text.
+/// Parse a document from raw Markdown file text.
 ///
 /// Expected format:
 /// ```text
@@ -28,7 +28,7 @@ pub struct Pattern {
 /// ---
 /// # Content here
 /// ```
-pub fn parse_pattern(raw: &str, file_path: PathBuf) -> Result<Pattern, AppError> {
+pub fn parse_document(raw: &str, file_path: PathBuf) -> Result<Document, AppError> {
     // Strip optional leading "---\n"
     let stripped = raw.strip_prefix("---\n").unwrap_or(raw);
 
@@ -37,22 +37,22 @@ pub fn parse_pattern(raw: &str, file_path: PathBuf) -> Result<Pattern, AppError>
         .split_once("\n---\n")
         .ok_or_else(|| AppError::Parse("missing closing front-matter delimiter".into()))?;
 
-    let mut pattern: Pattern = serde_yaml_ng::from_str(front)
+    let mut document: Document = serde_yaml_ng::from_str(front)
         .map_err(|e| AppError::Yaml(e.to_string()))?;
 
-    pattern.file_path = file_path;
-    pattern.content = body.to_owned();
+    document.file_path = file_path;
+    document.content = body.to_owned();
 
-    Ok(pattern)
+    Ok(document)
 }
 
-/// Serialize a pattern back to its Markdown file representation.
-pub fn serialize_pattern(pattern: &Pattern) -> Result<String, AppError> {
-    let front = serde_yaml_ng::to_string(pattern).map_err(|e| AppError::Yaml(e.to_string()))?;
-    Ok(format!("---\n{front}---\n{}", pattern.content))
+/// Serialize a document back to its Markdown file representation.
+pub fn serialize_document(document: &Document) -> Result<String, AppError> {
+    let front = serde_yaml_ng::to_string(document).map_err(|e| AppError::Yaml(e.to_string()))?;
+    Ok(format!("---\n{front}---\n{}", document.content))
 }
 
-/// Convert a pattern name to a filesystem-safe slug.
+/// Convert a document name to a filesystem-safe slug.
 pub fn slugify(name: &str) -> String {
     let s: String = name
         .to_lowercase()
@@ -90,45 +90,45 @@ mod tests {
     #[test]
     fn parse_roundtrip() {
         let path = PathBuf::from("test.md");
-        let pattern = parse_pattern(sample_raw(), path.clone()).unwrap();
+        let document = parse_document(sample_raw(), path.clone()).unwrap();
 
-        assert_eq!(pattern.name, "REST API Design");
-        assert!(pattern.enabled);
-        assert_eq!(pattern.date_added, "2026-05-12");
-        assert_eq!(pattern.task_type, "Architecture");
-        assert_eq!(pattern.content, "# Content\n\nSome body.\n");
+        assert_eq!(document.name, "REST API Design");
+        assert!(document.enabled);
+        assert_eq!(document.date_added, "2026-05-12");
+        assert_eq!(document.task_type, "Architecture");
+        assert_eq!(document.content, "# Content\n\nSome body.\n");
 
-        let serialized = serialize_pattern(&pattern).unwrap();
-        let reparsed = parse_pattern(&serialized, path).unwrap();
+        let serialized = serialize_document(&document).unwrap();
+        let reparsed = parse_document(&serialized, path).unwrap();
 
-        assert_eq!(reparsed.name, pattern.name);
-        assert_eq!(reparsed.enabled, pattern.enabled);
-        assert_eq!(reparsed.date_added, pattern.date_added);
-        assert_eq!(reparsed.task_type, pattern.task_type);
-        assert_eq!(reparsed.content, pattern.content);
+        assert_eq!(reparsed.name, document.name);
+        assert_eq!(reparsed.enabled, document.enabled);
+        assert_eq!(reparsed.date_added, document.date_added);
+        assert_eq!(reparsed.task_type, document.task_type);
+        assert_eq!(reparsed.content, document.content);
     }
 
     #[test]
     fn parse_with_dashes_in_content() {
         let raw = "---\nname: Foo\nenabled: true\ndate_added: \"2026-01-01\"\ntask_type: Style\n---\n# Title\n\n---\n\nA horizontal rule above.\n";
-        let pattern = parse_pattern(raw, PathBuf::from("foo.md")).unwrap();
-        assert!(pattern.content.contains("---"));
-        assert_eq!(pattern.name, "Foo");
+        let document = parse_document(raw, PathBuf::from("foo.md")).unwrap();
+        assert!(document.content.contains("---"));
+        assert_eq!(document.name, "Foo");
     }
 
     #[test]
     fn parse_missing_field_fails() {
         // Missing task_type
         let raw = "---\nname: Foo\nenabled: true\ndate_added: \"2026-01-01\"\n---\nContent\n";
-        let result = parse_pattern(raw, PathBuf::from("foo.md"));
+        let result = parse_document(raw, PathBuf::from("foo.md"));
         assert!(result.is_err());
     }
 
     #[test]
-    fn parse_disabled_pattern() {
+    fn parse_disabled_document() {
         let raw = "---\nname: Foo\nenabled: false\ndate_added: \"2026-01-01\"\ntask_type: Style\n---\nContent\n";
-        let pattern = parse_pattern(raw, PathBuf::from("foo.md")).unwrap();
-        assert!(!pattern.enabled);
+        let document = parse_document(raw, PathBuf::from("foo.md")).unwrap();
+        assert!(!document.enabled);
     }
 
     #[test]
@@ -141,5 +141,4 @@ mod tests {
         assert_eq!(slugify("C++ & Rust!"), "c-rust");
         assert_eq!(slugify("  leading spaces"), "leading-spaces");
     }
-
 }

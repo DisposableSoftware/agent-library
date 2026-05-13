@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "agent-library",
     version,
-    about = "MCP server and TUI for managing AI agent patterns"
+    about = "MCP server and TUI for managing AI agent documents"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -15,8 +15,8 @@ pub struct Cli {
 pub enum Commands {
     /// Launch the MCP server (JSON-RPC 2.0 over stdio)
     Serve,
-    /// Open the TUI for managing patterns
+    /// Open the TUI for managing documents
     Tui,
-    /// Scaffold the pattern library with seed patterns
+    /// Scaffold the document library with seed documents
     Init,
 }

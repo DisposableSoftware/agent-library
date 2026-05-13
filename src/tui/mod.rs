@@ -11,7 +11,7 @@ use crossterm::{
 use ratatui::{Terminal, backend::CrosstermBackend};
 
 use crate::error::AppError;
-use crate::store::PatternStore;
+use crate::store::DocumentStore;
 use app::{App, Mode};
 use events::{AppEvent, next_event};
 
@@ -46,7 +46,7 @@ impl Drop for TerminalGuard {
     }
 }
 
-pub fn run_tui(store: PatternStore) -> Result<(), AppError> {
+pub fn run_tui(store: DocumentStore) -> Result<(), AppError> {
     let guard = TerminalGuard::enter().map_err(AppError::Io)?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).map_err(AppError::Io)?;
@@ -61,7 +61,7 @@ pub fn run_tui(store: PatternStore) -> Result<(), AppError> {
 
 fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    store: PatternStore,
+    store: DocumentStore,
     guard: &TerminalGuard,
 ) -> Result<(), AppError> {
     let mut app = App::new(store)?;

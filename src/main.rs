@@ -1,8 +1,8 @@
 mod cli;
 mod config;
+mod document;
 mod error;
 mod mcp;
-mod pattern;
 mod seeds;
 mod store;
 mod tui;
@@ -10,11 +10,11 @@ mod tui;
 use clap::Parser;
 use cli::{Cli, Commands};
 use config::resolve_library_path;
-use store::PatternStore;
+use store::DocumentStore;
 
 fn main() {
     let cli = Cli::parse();
-    let store = PatternStore::new(resolve_library_path());
+    let store = DocumentStore::new(resolve_library_path());
 
     let result = match cli.command {
         Commands::Init => cmd_init(&store),
@@ -28,11 +28,11 @@ fn main() {
     }
 }
 
-fn cmd_init(store: &PatternStore) -> Result<(), error::AppError> {
-    let dir = store.patterns_dir();
+fn cmd_init(store: &DocumentStore) -> Result<(), error::AppError> {
+    let dir = store.documents_dir();
     if dir.exists() {
         eprintln!(
-            "Pattern library already exists at {}",
+            "Document library already exists at {}",
             store.base_dir.display()
         );
         eprintln!("Remove it or set AGENT_LIBRARY_PATH to a different location.");
@@ -40,12 +40,12 @@ fn cmd_init(store: &PatternStore) -> Result<(), error::AppError> {
     }
 
     std::fs::create_dir_all(&dir)?;
-    seeds::seed_patterns(store)?;
+    seeds::seed_documents(store)?;
 
     println!(
         "Initialized agent-library at {}",
         store.base_dir.display()
     );
-    println!("Created 3 seed patterns. Run `agent-library tui` to manage them.");
+    println!("Created 3 seed documents. Run `agent-library tui` to manage them.");
     Ok(())
 }
