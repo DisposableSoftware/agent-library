@@ -103,7 +103,7 @@ impl DocumentStore {
     pub fn regenerate_root(&self, documents: &[Document]) -> Result<(), AppError> {
         fs::create_dir_all(&self.base_dir)?;
         let root_path = self.base_dir.join("ROOT.md");
-        let content = build_root_doc(documents, &self.base_dir);
+        let content = build_root_doc(documents);
         write_atomic(&root_path, &content)?;
         Ok(())
     }
@@ -218,54 +218,25 @@ fn slugify_dir(s: &str) -> String {
     out.trim_end_matches('-').to_owned()
 }
 
-fn build_root_doc(documents: &[Document], base_dir: &Path) -> String {
-    let mut lines = vec![
-        "# Agent Document Library".to_owned(),
-        String::new(),
-        "This document provides an index of all available documents.".to_owned(),
-        "Use the MCP tools to retrieve documents:".to_owned(),
-        String::new(),
-        "- `lookup_document(task_type)` — retrieve all enabled documents for a task type".to_owned(),
-        "- `lookup_specific(name)` — retrieve a single document by name".to_owned(),
-        "- `save_document(name, task_type, content)` — save a new document".to_owned(),
-        "- `update_document(name, [content], [task_type], [enabled])` — update an existing document".to_owned(),
-        "- `browse_documents()` — return this document".to_owned(),
-        String::new(),
-        "Disabled documents are listed here but will **not** be returned by lookup tools.".to_owned(),
-        String::new(),
-        "## Documents".to_owned(),
-        String::new(),
-        "| Name | Task Type | Enabled | File |".to_owned(),
-        "|------|-----------|---------|------|".to_owned(),
-    ];
+fn build_root_doc(documents: &[Document]) -> String {
+    use std::collections::BTreeMap;
 
-    for d in documents {
-        let enabled = if d.enabled { "✓" } else { "✗" };
-        let rel_path = d
-            .file_path
-            .strip_prefix(base_dir)
-            .unwrap_or(&d.file_path)
-            .display()
-            .to_string();
-        lines.push(format!(
-            "| {} | {} | {} | {} |",
-            d.name, d.task_type, enabled, rel_path
-        ));
+    let mut by_type: BTreeMap<String, Vec<&Document>> = BTreeMap::new();
+    for doc in documents {
+        by_type.entry(doc.task_type.clone()).or_default().push(doc);
     }
 
-    lines.push(String::new());
-    lines.push("## Task Types Present".to_owned());
-    lines.push(String::new());
+    let mut lines = vec!["# Agent Document Library".to_owned(), String::new()];
 
-    let mut types: Vec<String> = documents
-        .iter()
-        .map(|d| d.task_type.clone())
-        .collect::<std::collections::HashSet<_>>()
-        .into_iter()
-        .collect();
-    types.sort();
-    lines.push(types.join(", "));
-    lines.push(String::new());
+    for (task_type, docs) in &by_type {
+        lines.push(format!("## {task_type}"));
+        for doc in docs {
+            let status = if doc.enabled { "✓" } else { "✗" };
+            let skill = if doc.is_skill { " ★" } else { "" };
+            lines.push(format!("- {} {}{}", doc.name, status, skill));
+        }
+        lines.push(String::new());
+    }
 
     lines.join("\n")
 }
@@ -292,6 +263,7 @@ mod tests {
             enabled,
             date_added: "2026-05-12".to_owned(),
             task_type: task_type.to_owned(),
+            is_skill: false,
             file_path: PathBuf::new(),
             content: format!("# {name}\n\nContent.\n"),
         }

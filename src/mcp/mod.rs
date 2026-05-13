@@ -97,7 +97,7 @@ fn handle_line(line: &str, store: &DocumentStore) -> Option<String> {
             serde_json::to_string(&RpcResponse::new(id, result)).unwrap_or_default()
         }
         "tools/list" => {
-            let result = json!({ "tools": tools::tool_definitions() });
+            let result = json!({ "tools": tools::tool_definitions(store) });
             serde_json::to_string(&RpcResponse::new(id, result)).unwrap_or_default()
         }
         "tools/call" => {

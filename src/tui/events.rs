@@ -13,6 +13,8 @@ pub enum AppEvent {
     DeleteRequest,
     Confirm,
     Cancel,
+    ToggleSkill,
+    RebuildRoot,
 }
 
 /// Block until the next key event and translate it to an AppEvent.
@@ -32,7 +34,9 @@ pub fn next_event() -> Result<Option<AppEvent>, AppError> {
                 KeyCode::Char(' ') | KeyCode::Char('e') => Some(AppEvent::Toggle),
                 KeyCode::Enter | KeyCode::Char('o') => Some(AppEvent::OpenEditor),
                 KeyCode::Char('r') => Some(AppEvent::Refresh),
+                KeyCode::Char('R') => Some(AppEvent::RebuildRoot),
                 KeyCode::Char('d') => Some(AppEvent::DeleteRequest),
+                KeyCode::Char('s') => Some(AppEvent::ToggleSkill),
                 KeyCode::Char('y') => Some(AppEvent::Confirm),
                 KeyCode::Char('n') | KeyCode::Esc => Some(AppEvent::Cancel),
                 _ => None,

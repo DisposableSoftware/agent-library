@@ -1,42 +1,37 @@
 use serde_json::{json, Value};
 
-use crate::document::Document;
+use crate::document::{Document, slugify};
 use crate::store::DocumentStore;
 
 /// Dispatch a `tools/call` request to the matching tool handler.
 /// Returns the MCP `result` value to embed in the RpcResponse.
 pub fn handle_tool_call(name: &str, params: Option<&Value>, store: &DocumentStore) -> Value {
     match name {
-        "lookup_document" => tool_lookup_document(params, store),
         "lookup_specific" => tool_lookup_specific(params, store),
         "save_document" => tool_save_document(params, store),
         "update_document" => tool_update_document(params, store),
         "browse_documents" => tool_browse_documents(store),
-        _ => json!({
-            "content": [{ "type": "text", "text": format!("Unknown tool: {name}") }],
-            "isError": true
-        }),
+        _ => {
+            if let Ok(docs) = store.load_all() {
+                if let Some(doc) = docs
+                    .iter()
+                    .find(|d| d.is_skill && d.enabled && slugify(&d.name) == name)
+                {
+                    return text_response(doc.content.clone());
+                }
+            }
+            json!({
+                "content": [{ "type": "text", "text": format!("Unknown tool: {name}") }],
+                "isError": true
+            })
+        }
     }
 }
 
-/// JSON Schema definitions for `tools/list`.
-pub fn tool_definitions() -> Value {
-    json!([
-        {
-            "name": "lookup_document",
-            "description": "Return all enabled documents for a given task type.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "task_type": {
-                        "type": "string",
-                        "description": "The task type to filter by (e.g. Architecture, Style Guide)"
-                    }
-                },
-                "required": ["task_type"]
-            }
-        },
-        {
+/// JSON Schema definitions for `tools/list`, including any enabled skill documents.
+pub fn tool_definitions(store: &DocumentStore) -> Value {
+    let mut tools = vec![
+        json!({
             "name": "lookup_specific",
             "description": "Return a specific document by name.",
             "inputSchema": {
@@ -49,8 +44,8 @@ pub fn tool_definitions() -> Value {
                 },
                 "required": ["name"]
             }
-        },
-        {
+        }),
+        json!({
             "name": "save_document",
             "description": "Save a new document to the library.",
             "inputSchema": {
@@ -62,63 +57,46 @@ pub fn tool_definitions() -> Value {
                 },
                 "required": ["name", "task_type", "content"]
             }
-        },
-        {
+        }),
+        json!({
             "name": "update_document",
-            "description": "Update an existing document by name. Supply at least one of content, task_type, or enabled.",
+            "description": "Update an existing document by name. Supply at least one of content, task_type, enabled, or isSkill.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "name": { "type": "string", "description": "Exact document name to update (case-insensitive)" },
                     "content": { "type": "string", "description": "New document body in Markdown" },
                     "task_type": { "type": "string", "description": "New task type category" },
-                    "enabled": { "type": "boolean", "description": "Enable or disable the document" }
+                    "enabled": { "type": "boolean", "description": "Enable or disable the document" },
+                    "isSkill": { "type": "boolean", "description": "Expose as a callable MCP tool" }
                 },
                 "required": ["name"]
             }
-        },
-        {
+        }),
+        json!({
             "name": "browse_documents",
             "description": "Return the root index document listing all documents.",
             "inputSchema": {
                 "type": "object",
                 "properties": {}
             }
+        }),
+    ];
+
+    if let Ok(docs) = store.load_all() {
+        for doc in docs.iter().filter(|d| d.is_skill && d.enabled) {
+            tools.push(json!({
+                "name": slugify(&doc.name),
+                "description": doc.name.clone(),
+                "inputSchema": { "type": "object", "properties": {} }
+            }));
         }
-    ])
+    }
+
+    json!(tools)
 }
 
 // ── Tool implementations ───────────────────────────────────────────────────
-
-fn tool_lookup_document(params: Option<&Value>, store: &DocumentStore) -> Value {
-    let task_type = match params.and_then(|p| p.get("task_type")).and_then(|v| v.as_str()) {
-        Some(t) => t.to_lowercase(),
-        None => return error_response("missing required parameter: task_type"),
-    };
-
-    match store.load_all() {
-        Err(e) => error_response(e.to_string()),
-        Ok(documents) => {
-            let matches: Vec<_> = documents
-                .into_iter()
-                .filter(|d| d.enabled && d.task_type.to_lowercase() == task_type)
-                .collect();
-
-            if matches.is_empty() {
-                return text_response(format!(
-                    "No enabled documents found for task type '{task_type}'."
-                ));
-            }
-
-            let text = matches
-                .iter()
-                .map(document_to_text)
-                .collect::<Vec<_>>()
-                .join("\n\n---\n\n");
-            text_response(text)
-        }
-    }
-}
 
 fn tool_lookup_specific(params: Option<&Value>, store: &DocumentStore) -> Value {
     let name = match params.and_then(|p| p.get("name")).and_then(|v| v.as_str()) {
@@ -167,6 +145,7 @@ fn tool_save_document(params: Option<&Value>, store: &DocumentStore) -> Value {
         enabled: true,
         date_added: today,
         task_type,
+        is_skill: false,
         file_path: Default::default(),
         content,
     };
@@ -195,9 +174,10 @@ fn tool_update_document(params: Option<&Value>, store: &DocumentStore) -> Value 
     let new_content = params.get("content").and_then(|v| v.as_str());
     let new_task_type = params.get("task_type").and_then(|v| v.as_str());
     let new_enabled = params.get("enabled").and_then(|v| v.as_bool());
+    let new_is_skill = params.get("isSkill").and_then(|v| v.as_bool());
 
-    if new_content.is_none() && new_task_type.is_none() && new_enabled.is_none() {
-        return error_response("at least one of content, task_type, or enabled must be provided");
+    if new_content.is_none() && new_task_type.is_none() && new_enabled.is_none() && new_is_skill.is_none() {
+        return error_response("at least one of content, task_type, enabled, or isSkill must be provided");
     }
 
     let mut documents = match store.load_all() {
@@ -221,6 +201,9 @@ fn tool_update_document(params: Option<&Value>, store: &DocumentStore) -> Value 
     }
     if let Some(e) = new_enabled {
         document.enabled = e;
+    }
+    if let Some(s) = new_is_skill {
+        document.is_skill = s;
     }
 
     let display_name = document.name.clone();
@@ -308,60 +291,26 @@ mod tests {
     }
 
     fn add_document(store: &DocumentStore, name: &str, task_type: &str, enabled: bool) {
+        add_skill_document(store, name, task_type, enabled, false);
+    }
+
+    fn add_skill_document(
+        store: &DocumentStore,
+        name: &str,
+        task_type: &str,
+        enabled: bool,
+        is_skill: bool,
+    ) {
         let d = Document {
             name: name.to_owned(),
             enabled,
             date_added: "2026-05-12".to_owned(),
             task_type: task_type.to_owned(),
+            is_skill,
             file_path: PathBuf::new(),
-            content: format!("# {name}\n\nContent.\n"),
+            content: format!("# {name}\n\nSkill content for {name}.\n"),
         };
         store.save_document(&d).unwrap();
-    }
-
-    #[test]
-    fn lookup_document_returns_matching() {
-        let store = temp_store();
-        add_document(&store, "REST API Design", "Architecture", true);
-        add_document(&store, "Git Commit Style", "Style Guide", true);
-
-        let result = tool_lookup_document(Some(&json!({"task_type": "architecture"})), &store);
-        let text = result["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("REST API Design"));
-        assert!(!text.contains("Git Commit Style"));
-    }
-
-    #[test]
-    fn lookup_document_case_insensitive() {
-        let store = temp_store();
-        add_document(&store, "REST API Design", "Architecture", true);
-
-        let result = tool_lookup_document(Some(&json!({"task_type": "ARCHITECTURE"})), &store);
-        let text = result["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("REST API Design"));
-        assert_ne!(result.get("isError"), Some(&json!(true)));
-    }
-
-    #[test]
-    fn lookup_document_enabled_only() {
-        let store = temp_store();
-        add_document(&store, "REST API Design", "Architecture", true);
-        add_document(&store, "Old Document", "Architecture", false);
-
-        let result = tool_lookup_document(Some(&json!({"task_type": "architecture"})), &store);
-        let text = result["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("REST API Design"));
-        assert!(!text.contains("Old Document"));
-    }
-
-    #[test]
-    fn lookup_document_no_match() {
-        let store = temp_store();
-        let result = tool_lookup_document(Some(&json!({"task_type": "nonexistent"})), &store);
-        // Should return a message, not an error
-        assert_ne!(result.get("isError"), Some(&json!(true)));
-        let text = result["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("No enabled documents"));
     }
 
     #[test]
@@ -470,5 +419,61 @@ mod tests {
         // Jan(31)+Feb(28)+Mar(31)+Apr(30)+May days 1-11 = 131 → 2026-05-12
         // 20454 + 131 = 20585
         assert_eq!(unix_days_to_date(20585), "2026-05-12");
+    }
+
+    #[test]
+    fn skill_tool_appears_in_definitions() {
+        let store = temp_store();
+        add_skill_document(&store, "REST API Design", "Architecture", true, true);
+
+        let defs = tool_definitions(&store);
+        let tools = defs.as_array().unwrap();
+        let names: Vec<&str> = tools
+            .iter()
+            .filter_map(|t| t["name"].as_str())
+            .collect();
+        assert!(names.contains(&"rest-api-design"), "skill slug missing from tool list: {names:?}");
+    }
+
+    #[test]
+    fn skill_tool_call_returns_content() {
+        let store = temp_store();
+        add_skill_document(&store, "REST API Design", "Architecture", true, true);
+
+        let result = handle_tool_call("rest-api-design", None, &store);
+        assert_ne!(result.get("isError"), Some(&json!(true)));
+        let text = result["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("REST API Design"));
+    }
+
+    #[test]
+    fn disabled_skill_not_exposed() {
+        let store = temp_store();
+        add_skill_document(&store, "Hidden Skill", "Architecture", false, true);
+
+        let defs = tool_definitions(&store);
+        let tools = defs.as_array().unwrap();
+        let names: Vec<&str> = tools
+            .iter()
+            .filter_map(|t| t["name"].as_str())
+            .collect();
+        assert!(!names.contains(&"hidden-skill"), "disabled skill must not appear in tool list");
+
+        let result = handle_tool_call("hidden-skill", None, &store);
+        assert_eq!(result.get("isError"), Some(&json!(true)));
+    }
+
+    #[test]
+    fn non_skill_doc_not_exposed() {
+        let store = temp_store();
+        add_document(&store, "Plain Document", "Architecture", true);
+
+        let defs = tool_definitions(&store);
+        let tools = defs.as_array().unwrap();
+        let names: Vec<&str> = tools
+            .iter()
+            .filter_map(|t| t["name"].as_str())
+            .collect();
+        assert!(!names.contains(&"plain-document"));
     }
 }

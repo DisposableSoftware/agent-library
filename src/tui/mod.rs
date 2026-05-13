@@ -101,6 +101,16 @@ fn run_loop(
                     app.status_msg = Some("Refreshed.".to_owned());
                 }
             }
+            AppEvent::RebuildRoot => {
+                if let Err(e) = app.rebuild_root() {
+                    app.status_msg = Some(format!("Error: {e}"));
+                }
+            }
+            AppEvent::ToggleSkill => {
+                if let Err(e) = app.toggle_skill() {
+                    app.status_msg = Some(format!("Error: {e}"));
+                }
+            }
             AppEvent::DeleteRequest => {
                 app.request_delete();
             }
