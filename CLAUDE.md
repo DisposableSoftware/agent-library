@@ -39,6 +39,7 @@ Front-matter fields:
 - `enabled` — whether agents can retrieve it (bool)
 - `date_added` — ISO date `YYYY-MM-DD`
 - `task_type` — category string (e.g. `Architecture`, `Style Guide`, `Documentation`)
+- `isSkill` — when `true`, exposes the document as a callable MCP tool (omitted when false)
 
 ## MCP Tools
 
@@ -46,11 +47,16 @@ All tools return MCP `text` content blocks.
 
 | Tool | Params | Description |
 |------|--------|-------------|
-| `lookup_document` | `task_type: string` | All enabled documents matching the type (case-insensitive) |
 | `lookup_specific` | `name: string` | A single document by name (case-insensitive) |
 | `save_document` | `name, task_type, content` | Write a new document; regenerates ROOT.md |
-| `update_document` | `name` (required); `content`, `task_type`, `enabled` (at least one required) | Update fields on an existing document by name (case-insensitive); regenerates ROOT.md |
-| `browse_documents` | — | Returns ROOT.md verbatim |
+| `update_document` | `name` (required); `content`, `task_type`, `enabled`, `isSkill` (at least one required) | Update fields on an existing document by name (case-insensitive); regenerates ROOT.md |
+| `browse_documents` | — | Returns ROOT.md — compact index grouped by task type |
+| `<skill-slug>` | — | Any enabled document with `isSkill: true` is exposed as its own tool, named by slugifying the document name |
+
+### Recommended agent workflow
+
+1. Call `browse_documents` to see all available documents grouped by task type.
+2. Call `lookup_specific(name)` for the exact document needed, or call its skill tool directly if it has one.
 
 ## Source Layout
 
@@ -90,7 +96,7 @@ No async runtime. MCP stdio is synchronous; the TUI uses crossterm's blocking ev
 - **Stdout discipline:** MCP JSON-RPC is on stdout. All logging/debug output must go to stderr or it corrupts the protocol stream.
 - **Flush after every MCP write:** `stdout.lock().flush()` after every `writeln!` — pipe-buffered stdout will hang the host.
 - **Atomic file writes:** documents are written to `.tmp` then renamed (POSIX atomic rename).
-- **ROOT.md is auto-generated:** regenerated in full after every `save_document` or `update_document` call. Sorted by task type then name for deterministic output.
+- **ROOT.md is auto-generated:** regenerated in full after every `save_document` or `update_document` call. Grouped by task type (alphabetical), documents sorted by name within each group. Never edit it by hand.
 - **Notifications vs requests:** MCP `initialized` is a notification (no `id`); the server returns no response. Requests always have an `id`.
 - **TUI + editor:** raw mode is disabled before spawning `$EDITOR` and re-enabled after. Editor lookup order: `$VISUAL` → `$EDITOR` → `vi`.
 - **Slug generation:** document names are lowercased and non-alphanumeric characters replaced with hyphens. Collisions append `-2`, `-3`, etc.

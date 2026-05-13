@@ -10,10 +10,16 @@ pub struct Document {
     pub enabled: bool,
     pub date_added: String,
     pub task_type: String,
+    #[serde(rename = "isSkill", default, skip_serializing_if = "is_false")]
+    pub is_skill: bool,
     #[serde(skip)]
     pub file_path: PathBuf,
     #[serde(skip)]
     pub content: String,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 /// Parse a document from raw Markdown file text.
@@ -87,6 +93,10 @@ mod tests {
         "---\nname: REST API Design\nenabled: true\ndate_added: \"2026-05-12\"\ntask_type: Architecture\n---\n# Content\n\nSome body.\n"
     }
 
+    fn sample_skill_raw() -> &'static str {
+        "---\nname: My Skill\nenabled: true\ndate_added: \"2026-05-12\"\ntask_type: Architecture\nisSkill: true\n---\n# Skill content\n"
+    }
+
     #[test]
     fn parse_roundtrip() {
         let path = PathBuf::from("test.md");
@@ -106,6 +116,28 @@ mod tests {
         assert_eq!(reparsed.date_added, document.date_added);
         assert_eq!(reparsed.task_type, document.task_type);
         assert_eq!(reparsed.content, document.content);
+        assert_eq!(reparsed.is_skill, document.is_skill);
+    }
+
+    #[test]
+    fn parse_skill_document() {
+        let doc = parse_document(sample_skill_raw(), PathBuf::from("skill.md")).unwrap();
+        assert!(doc.is_skill);
+        // Round-trip: isSkill: true must survive serialize → parse
+        let serialized = serialize_document(&doc).unwrap();
+        assert!(serialized.contains("isSkill: true"));
+        let reparsed = parse_document(&serialized, PathBuf::from("skill.md")).unwrap();
+        assert!(reparsed.is_skill);
+    }
+
+    #[test]
+    fn is_skill_defaults_false() {
+        // Documents without isSkill in front-matter should default to false
+        let doc = parse_document(sample_raw(), PathBuf::from("test.md")).unwrap();
+        assert!(!doc.is_skill);
+        // And is_skill: false must NOT be written to the serialized output
+        let serialized = serialize_document(&doc).unwrap();
+        assert!(!serialized.contains("isSkill"));
     }
 
     #[test]

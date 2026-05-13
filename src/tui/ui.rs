@@ -2,7 +2,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
@@ -13,7 +13,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(0),    // document list
-            Constraint::Length(3), // status / help bar
+            Constraint::Length(4), // help line + status line
         ])
         .split(f.area());
 
@@ -42,6 +42,10 @@ fn draw_document_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
                     format!("  [{}]", d.task_type),
                     Style::default().fg(Color::DarkGray),
                 ),
+                Span::styled(
+                    if d.is_skill { " ★" } else { "" },
+                    Style::default().fg(Color::Yellow),
+                ),
             ]);
             ListItem::new(line)
         })
@@ -67,12 +71,18 @@ fn draw_document_list(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
 }
 
 fn draw_status_bar(f: &mut Frame, app: &App, area: ratatui::layout::Rect) {
-    let msg = app
-        .status_msg
-        .as_deref()
-        .unwrap_or("j/k ↑↓ move  space/e toggle  o/Enter edit  d delete  r refresh  q quit");
+    const HELP: &str =
+        "j/k ↑↓ move  space/e toggle  s skill  o/Enter edit  d delete  r refresh  R rebuild-root  q quit";
 
-    let paragraph = Paragraph::new(msg).block(Block::default().borders(Borders::ALL));
+    let text = Text::from(vec![
+        Line::from(HELP),
+        Line::from(Span::styled(
+            app.status_msg.as_deref().unwrap_or(""),
+            Style::default().fg(Color::Cyan),
+        )),
+    ]);
+
+    let paragraph = Paragraph::new(text).block(Block::default().borders(Borders::ALL));
     f.render_widget(paragraph, area);
 }
 

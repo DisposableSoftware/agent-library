@@ -93,6 +93,29 @@ impl App {
         Ok(())
     }
 
+    pub fn rebuild_root(&mut self) -> Result<(), AppError> {
+        let documents = self.store.load_all()?;
+        self.store.regenerate_root(&documents)?;
+        self.status_msg = Some("ROOT.md rebuilt.".to_owned());
+        Ok(())
+    }
+
+    pub fn toggle_skill(&mut self) -> Result<(), AppError> {
+        if self.documents.is_empty() {
+            return Ok(());
+        }
+        let d = &mut self.documents[self.cursor];
+        d.is_skill = !d.is_skill;
+        self.store.update_document(d)?;
+        let name = self.documents[self.cursor].name.clone();
+        let is_skill = self.documents[self.cursor].is_skill;
+        self.status_msg = Some(format!(
+            "{name} {}",
+            if is_skill { "marked as skill" } else { "unmarked as skill" }
+        ));
+        Ok(())
+    }
+
     pub fn request_delete(&mut self) {
         if self.documents.is_empty() {
             return;
@@ -154,6 +177,7 @@ mod tests {
             enabled,
             date_added: "2026-05-12".to_owned(),
             task_type: "Architecture".to_owned(),
+            is_skill: false,
             file_path: PathBuf::new(),
             content: "# Content\n".to_owned(),
         }
@@ -219,6 +243,23 @@ mod tests {
         let mut app = App::new(store).unwrap();
         app.quit();
         assert_eq!(app.mode, Mode::Quitting);
+    }
+
+    #[test]
+    fn toggle_skill_flips_field() {
+        let mut app = app_with_documents(1);
+        assert!(!app.documents[0].is_skill);
+        app.toggle_skill().unwrap();
+        assert!(app.documents[0].is_skill);
+        app.toggle_skill().unwrap();
+        assert!(!app.documents[0].is_skill);
+    }
+
+    #[test]
+    fn toggle_skill_empty_list_no_panic() {
+        let store = temp_store();
+        let mut app = App::new(store).unwrap();
+        app.toggle_skill().unwrap();
     }
 
     #[test]
