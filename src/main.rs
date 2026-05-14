@@ -5,6 +5,7 @@ mod error;
 mod mcp;
 mod prefs;
 mod seeds;
+mod stats;
 mod store;
 mod tui;
 
