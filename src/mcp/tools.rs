@@ -6,6 +6,7 @@ use crate::store::DocumentStore;
 /// Dispatch a `tools/call` request to the matching tool handler.
 /// Returns the MCP `result` value to embed in the RpcResponse.
 pub fn handle_tool_call(name: &str, params: Option<&Value>, store: &DocumentStore) -> Value {
+    crate::stats::Stats::increment(&store.base_dir, name);
     match name {
         "lookup_specific" => tool_lookup_specific(params, store),
         "save_document" => tool_save_document(params, store),
