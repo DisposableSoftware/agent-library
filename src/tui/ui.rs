@@ -29,9 +29,15 @@ pub fn draw(f: &mut Frame, app: &App) {
 }
 
 fn draw_document_list(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
-    // 2 borders + 2 highlight symbol + 2 icon + 20 for "  [TaskType]"
-    let overhead: usize = 26;
-    let name_width = (area.width as usize).saturating_sub(overhead).max(20);
+    let max_task_type_len = app
+        .documents
+        .iter()
+        .map(|d| d.task_type.chars().count())
+        .max()
+        .unwrap_or(0);
+    // 2 borders + 2 highlight + 2 enabled + 2 skill + 4 for "  []" + task type
+    let overhead = 12 + max_task_type_len;
+    let name_width = (area.width as usize).saturating_sub(overhead).max(10);
 
     let items: Vec<ListItem> = app
         .documents
@@ -45,16 +51,16 @@ fn draw_document_list(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
                     Style::default().fg(enabled_color),
                 ),
                 Span::styled(
+                    if d.is_skill { "★ " } else { "  " },
+                    Style::default().fg(theme.base0a),
+                ),
+                Span::styled(
                     format!("{:<width$}", truncate(&d.name, name_width), width = name_width),
                     Style::default().fg(theme.base05),
                 ),
                 Span::styled(
                     format!("  [{}]", d.task_type),
                     Style::default().fg(theme.base03),
-                ),
-                Span::styled(
-                    if d.is_skill { " ★" } else { "" },
-                    Style::default().fg(theme.base0a),
                 ),
             ]);
             ListItem::new(line)
