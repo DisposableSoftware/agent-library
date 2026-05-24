@@ -13,6 +13,7 @@ pub enum Mode {
     Quitting,
     ConfirmDelete,
     ThemePicker,
+    Help,
 }
 
 pub struct App {
@@ -182,6 +183,14 @@ impl App {
     }
 
     pub fn close_theme_picker(&mut self) {
+        self.mode = Mode::Normal;
+    }
+
+    pub fn open_help(&mut self) {
+        self.mode = Mode::Help;
+    }
+
+    pub fn close_help(&mut self) {
         self.mode = Mode::Normal;
     }
 

@@ -76,13 +76,11 @@ fn run_loop(
         };
 
         match event {
-            AppEvent::Quit => {
-                if app.mode == Mode::ThemePicker {
-                    app.close_theme_picker();
-                } else {
-                    app.quit();
-                }
-            }
+            AppEvent::Quit => match app.mode {
+                Mode::ThemePicker => app.close_theme_picker(),
+                Mode::Help => app.close_help(),
+                _ => app.quit(),
+            },
             AppEvent::MoveUp => {
                 if app.mode == Mode::ThemePicker {
                     app.picker_up();
@@ -154,16 +152,20 @@ fn run_loop(
                     app.mode = Mode::Normal;
                 }
             }
-            AppEvent::Cancel => {
-                if app.mode == Mode::ThemePicker {
-                    app.close_theme_picker();
-                } else if app.mode == Mode::ConfirmDelete {
-                    app.cancel_delete();
-                }
-            }
+            AppEvent::Cancel => match app.mode {
+                Mode::ThemePicker => app.close_theme_picker(),
+                Mode::ConfirmDelete => app.cancel_delete(),
+                Mode::Help => app.close_help(),
+                _ => {}
+            },
             AppEvent::OpenThemePicker => {
                 if app.mode == Mode::Normal {
                     app.open_theme_picker();
+                }
+            }
+            AppEvent::OpenHelp => {
+                if app.mode == Mode::Normal {
+                    app.open_help();
                 }
             }
         }

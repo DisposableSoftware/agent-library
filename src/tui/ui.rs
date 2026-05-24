@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
 
 use super::app::{App, Mode};
@@ -25,6 +25,9 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     if app.mode == Mode::ThemePicker {
         draw_theme_picker(f, app, theme);
+    }
+    if app.mode == Mode::Help {
+        draw_help_popup(f, theme);
     }
 }
 
@@ -96,7 +99,7 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let help = if app.mode == Mode::ThemePicker {
         "j/k ↑↓ move  Enter select  Esc cancel"
     } else {
-        "j/k ↑↓ move  space/e toggle  s skill  o/Enter edit  d delete  r refresh  R rebuild-root  T theme  q quit"
+        "j/k move  ? help  q quit"
     };
 
     let text = Text::from(vec![
@@ -113,6 +116,49 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
             .border_style(Style::default().fg(theme.base03))
             .style(Style::default().bg(theme.base00)),
     );
+    f.render_widget(paragraph, area);
+}
+
+fn draw_help_popup(f: &mut Frame, theme: &Theme) {
+    let area = centered_rect(52, 75, f.area());
+
+    let head = Style::default().fg(theme.base0d).add_modifier(Modifier::BOLD);
+    let key = Style::default().fg(theme.base0a);
+    let desc = Style::default().fg(theme.base05);
+
+    let lines: Vec<Line> = vec![
+        Line::from(Span::styled("Navigation", head)),
+        Line::from(vec![Span::styled("  j / ↓       ", key), Span::styled("move down", desc)]),
+        Line::from(vec![Span::styled("  k / ↑       ", key), Span::styled("move up", desc)]),
+        Line::from(""),
+        Line::from(Span::styled("Actions", head)),
+        Line::from(vec![Span::styled("  Space / e   ", key), Span::styled("toggle enabled", desc)]),
+        Line::from(vec![Span::styled("  s           ", key), Span::styled("toggle skill", desc)]),
+        Line::from(vec![Span::styled("  o / Enter   ", key), Span::styled("edit in $EDITOR", desc)]),
+        Line::from(vec![Span::styled("  d           ", key), Span::styled("delete document", desc)]),
+        Line::from(vec![Span::styled("  r           ", key), Span::styled("refresh list", desc)]),
+        Line::from(vec![Span::styled("  R           ", key), Span::styled("rebuild ROOT.md", desc)]),
+        Line::from(""),
+        Line::from(Span::styled("Interface", head)),
+        Line::from(vec![Span::styled("  T           ", key), Span::styled("theme picker", desc)]),
+        Line::from(vec![Span::styled("  ? / Esc     ", key), Span::styled("close this help", desc)]),
+        Line::from(vec![Span::styled("  q           ", key), Span::styled("quit", desc)]),
+    ];
+
+    let paragraph = Paragraph::new(Text::from(lines))
+        .wrap(Wrap { trim: false })
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.base0d))
+                .title(Span::styled(
+                    " Help ",
+                    Style::default().fg(theme.base0d).add_modifier(Modifier::BOLD),
+                ))
+                .style(Style::default().bg(theme.base01)),
+        );
+
+    f.render_widget(Clear, area);
     f.render_widget(paragraph, area);
 }
 
