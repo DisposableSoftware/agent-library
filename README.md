@@ -47,13 +47,13 @@ cargo install --path .
 ### With Nix
 
 ```sh
-nix run git+https://codeberg.org/westongpt/agent-library
+nix run git+https://github.com/westongpt/agent-library
 ```
 
 Or enter a dev shell:
 
 ```sh
-nix develop git+https://codeberg.org/westongpt/agent-library
+nix develop git+https://github.com/westongpt/agent-library
 ```
 
 ## Quick start
@@ -93,7 +93,7 @@ The repo ships a Claude Code slash command that turns any document into a librar
 **One-liner** (installs to `~/.claude/commands/` so it's available in every project):
 
 ```sh
-curl -fsSL https://codeberg.org/westongpt/agent-library/raw/branch/main/install-skill.sh | sh
+curl -fsSL https://raw.githubusercontent.com/westongpt/agent-library/main/install-skill.sh | sh
 ```
 
 **From a clone:**
