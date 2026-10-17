@@ -1,5 +1,14 @@
 # Agent Document Library
 
+> [!WARNING]
+> **Certified, artisanal, vibe-coded slop.**
+>
+> No human has read this code. An AI wrote all of it while a person said "yeah, looks
+> good" and pressed Enter a lot.
+> It reads and writes the documents your agents see, and it will happily let them save things you never reviewed.
+>
+> Bug reports will be read with great affection and then ignored.
+
 ![screenshot](img/screenshot_1.png)
 
 A tool for managing and providing human-vetted software documents to AI agents. Provides an MCP server that agents query for documents, and a TUI for humans to manage the library.
@@ -47,13 +56,13 @@ cargo install --path .
 ### With Nix
 
 ```sh
-nix run git+https://github.com/westongpt/agent-library
+nix run github:DisposableSoftware/agent-library
 ```
 
 Or enter a dev shell:
 
 ```sh
-nix develop git+https://github.com/westongpt/agent-library
+nix develop github:DisposableSoftware/agent-library
 ```
 
 ## Quick start
@@ -93,7 +102,7 @@ The repo ships a Claude Code slash command that turns any document into a librar
 **One-liner** (installs to `~/.claude/commands/` so it's available in every project):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/westongpt/agent-library/main/install-skill.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DisposableSoftware/agent-library/main/install-skill.sh | sh
 ```
 
 **From a clone:**

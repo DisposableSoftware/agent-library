@@ -5,7 +5,7 @@
 set -e
 
 DEST="$HOME/.claude/commands/intake-document.md"
-RAW_URL="https://codeberg.org/westongpt/agent-library/raw/branch/main/.claude/commands/intake-document.md"
+RAW_URL="https://raw.githubusercontent.com/DisposableSoftware/agent-library/main/.claude/commands/intake-document.md"
 
 mkdir -p "$(dirname "$DEST")"
 
